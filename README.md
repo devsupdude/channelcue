@@ -15,11 +15,26 @@ Open <http://localhost:3000>.
 
 This repo includes `vercel.json` so Vercel routes requests through the Express serverless function.
 
-Important production note: Vercel serverless file storage is temporary. The current deployment-safe fallback stores user configuration and indexes under `/tmp`, which is enough to prevent crashes and test the flow, but not enough for durable production data. Before selling this broadly, connect a managed store such as Vercel Postgres, Neon, Supabase, or another hosted database for:
+Important production note: Vercel serverless file storage is temporary. This app supports Convex as durable storage for production data:
 
 - per-user Google OAuth client ID/secret
 - trial start dates
 - cached video indexes
+
+To use Convex:
+
+```powershell
+npx convex dev
+npx convex deploy
+```
+
+Then add the Convex deployment URL to Vercel:
+
+```text
+CONVEX_URL=
+```
+
+If `CONVEX_URL` is not set, the app falls back to JSON files locally and `/tmp` on Vercel. That fallback can prevent crashes, but it is not durable enough for a paid production app.
 
 ## Launch video
 
@@ -50,7 +65,7 @@ http://localhost:3000/oauth2callback
 ```
 
 4. Open the app and choose **Configuration**.
-5. Paste the client ID and client secret. The app saves them to `data/app.db`.
+5. Paste the client ID and client secret. The app saves them to Convex when `CONVEX_URL` is configured, or to local JSON files during development.
 
 ## Customer Google Setup Instructions
 
@@ -58,10 +73,10 @@ Send this after someone pays for ChannelCue Pro:
 
 1. Open <https://console.cloud.google.com/apis/credentials>.
 2. Create a new Google Cloud project, or select an existing project.
-3. Go to **APIs & Services → Library**.
+3. Go to **APIs & Services -> Library**.
 4. Search for **YouTube Data API v3** and click **Enable**.
-5. Go to **APIs & Services → Credentials**.
-6. Click **Create credentials → OAuth client ID**.
+5. Go to **APIs & Services -> Credentials**.
+6. Click **Create credentials -> OAuth client ID**.
 7. If prompted, configure the OAuth consent screen first. Use **External** for normal customer accounts, add your email, and save.
 8. Choose **Web application** as the application type.
 9. Under **Authorized JavaScript origins**, add:
@@ -78,7 +93,7 @@ http://localhost:3000/oauth2callback
 
 11. Click **Create**.
 12. Copy the **Client ID** and **Client secret**.
-13. In ChannelCue, open **Configuration → Google setup**, paste both values, and save.
+13. In ChannelCue, open **Configuration -> Google setup**, paste both values, and save.
 
 If they ever rotate keys or create a new OAuth client, they can reopen **Configuration** and save the new values.
 
@@ -112,6 +127,7 @@ After the trial expires, users must save their own Google client ID and client s
 
 - Latest videos come from each channel's uploads playlist.
 - Topic search uses a local cached index in `data/indexes/`, scoped by signed-in user.
+- In production with `CONVEX_URL`, configuration and cached indexes are stored in Convex.
 - The index is built from each subscribed channel's uploads playlist, which avoids expensive `search.list` calls.
 - Use `INDEX_UPLOADS_PER_CHANNEL` to control how many recent uploads are cached per channel.
 - Use `INDEX_REFRESH_MINUTES` to control when the background refresh considers the index stale.

@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import express from 'express';
 import session from 'express-session';
+import { ConvexHttpClient } from 'convex/browser';
+import { makeFunctionReference } from 'convex/server';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { google } from 'googleapis';
 import { clerkMiddleware, getAuth } from '@clerk/express';
@@ -20,6 +22,14 @@ const activeRefreshContexts = new Map();
 const activeRefreshes = new Map();
 const CLERK_CONFIGURED = Boolean(process.env.CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY);
 const CONFIG_PATH = `${DATA_DIR}/app-config.json`;
+const CONVEX_URL = process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL || '';
+const convex = CONVEX_URL ? new ConvexHttpClient(CONVEX_URL) : null;
+const convexFns = {
+  getConfigValue: makeFunctionReference('appData:getConfigValue'),
+  setConfigValues: makeFunctionReference('appData:setConfigValues'),
+  getIndex: makeFunctionReference('appData:getIndex'),
+  setIndex: makeFunctionReference('appData:setIndex')
+};
 mkdirSync(DATA_DIR, { recursive: true });
 
 const app = express();
@@ -71,16 +81,25 @@ function writeConfigStore(store) {
   writeFileSync(CONFIG_PATH, JSON.stringify(store, null, 2), 'utf8');
 }
 
-function getConfigValue(userId, key) {
+async function getConfigValue(userId, key) {
+  if (convex) return convex.query(convexFns.getConfigValue, { userId, key });
   return readConfigStore()[userId]?.[key]?.value;
 }
 
-function setConfigValues(userId, values) {
+async function setConfigValues(userId, values) {
+  const cleanValues = Object.fromEntries(
+    Object.entries(values).map(([key, value]) => [key, String(value)])
+  );
+  if (convex) {
+    await convex.mutation(convexFns.setConfigValues, { userId, values: cleanValues });
+    return;
+  }
+
   const store = readConfigStore();
   store[userId] ||= {};
-  for (const [key, value] of Object.entries(values)) {
+  for (const [key, value] of Object.entries(cleanValues)) {
     store[userId][key] = {
-      value: String(value),
+      value,
       updatedAt: new Date().toISOString()
     };
   }
@@ -94,8 +113,8 @@ function getDefaultGoogleConfig() {
   };
 }
 
-function getTrialInfo(userId) {
-  const startedAt = getConfigValue(userId, 'DEFAULT_GOOGLE_TRIAL_STARTED_AT');
+async function getTrialInfo(userId) {
+  const startedAt = await getConfigValue(userId, 'DEFAULT_GOOGLE_TRIAL_STARTED_AT');
   const defaultConfig = getDefaultGoogleConfig();
   const available = Boolean(defaultConfig.clientId && defaultConfig.clientSecret);
 
@@ -127,21 +146,24 @@ function getTrialInfo(userId) {
   };
 }
 
-function hasPersonalGoogleConfig(userId) {
-  return Boolean(getConfigValue(userId, 'GOOGLE_CLIENT_ID') && getConfigValue(userId, 'GOOGLE_CLIENT_SECRET'));
+async function hasPersonalGoogleConfig(userId) {
+  return Boolean(
+    (await getConfigValue(userId, 'GOOGLE_CLIENT_ID')) &&
+      (await getConfigValue(userId, 'GOOGLE_CLIENT_SECRET'))
+  );
 }
 
-function getGoogleConfig(userId) {
+async function getGoogleConfig(userId) {
   const personalConfig = {
-    clientId: getConfigValue(userId, 'GOOGLE_CLIENT_ID') || '',
-    clientSecret: getConfigValue(userId, 'GOOGLE_CLIENT_SECRET') || ''
+    clientId: (await getConfigValue(userId, 'GOOGLE_CLIENT_ID')) || '',
+    clientSecret: (await getConfigValue(userId, 'GOOGLE_CLIENT_SECRET')) || ''
   };
 
   if (personalConfig.clientId && personalConfig.clientSecret) {
     return { ...personalConfig, source: 'personal' };
   }
 
-  const trial = getTrialInfo(userId);
+  const trial = await getTrialInfo(userId);
   if (trial.active) {
     return { ...getDefaultGoogleConfig(), source: 'trial' };
   }
@@ -153,10 +175,10 @@ function getGoogleConfig(userId) {
   };
 }
 
-function hasGoogleConfig(req) {
+async function hasGoogleConfig(req) {
   const userId = getUserId(req);
   if (!userId) return false;
-  const config = getGoogleConfig(userId);
+  const config = await getGoogleConfig(userId);
   return Boolean(config.clientId && config.clientSecret);
 }
 
@@ -165,7 +187,17 @@ function getIndexPath(userId) {
   return `${INDEX_DIR}/${safeUserId}.json`;
 }
 
-function readIndex(userId) {
+async function readIndex(userId) {
+  if (convex) {
+    const index = await convex.query(convexFns.getIndex, { userId });
+    if (index) return index;
+    return {
+      refreshedAt: null,
+      channels: [],
+      videos: []
+    };
+  }
+
   const indexPath = getIndexPath(userId);
   if (!existsSync(indexPath)) {
     return {
@@ -186,7 +218,11 @@ function readIndex(userId) {
   }
 }
 
-function writeIndex(userId, index) {
+async function writeIndex(userId, index) {
+  if (convex) {
+    await convex.mutation(convexFns.setIndex, { userId, index });
+    return;
+  }
   mkdirSync(INDEX_DIR, { recursive: true });
   writeFileSync(getIndexPath(userId), JSON.stringify(index, null, 2), 'utf8');
 }
@@ -204,10 +240,10 @@ function getRedirectUrl(req) {
   return `${req.protocol}://${req.get('host')}${REDIRECT_PATH}`;
 }
 
-function createOAuthClient(req) {
+async function createOAuthClient(req) {
   const userId = getUserId(req);
   if (!userId) return null;
-  const config = getGoogleConfig(userId);
+  const config = await getGoogleConfig(userId);
   if (!config.clientId || !config.clientSecret) return null;
   return new google.auth.OAuth2(
     config.clientId,
@@ -216,8 +252,8 @@ function createOAuthClient(req) {
   );
 }
 
-function createOAuthClientFromRedirect(redirectUrl, userId) {
-  const config = getGoogleConfig(userId);
+async function createOAuthClientFromRedirect(redirectUrl, userId) {
+  const config = await getGoogleConfig(userId);
   if (!config.clientId || !config.clientSecret) return null;
   return new google.auth.OAuth2(
     config.clientId,
@@ -226,16 +262,16 @@ function createOAuthClientFromRedirect(redirectUrl, userId) {
   );
 }
 
-function createYouTubeFromTokens(tokens, redirectUrl, userId, onTokens) {
-  const client = createOAuthClientFromRedirect(redirectUrl, userId);
+async function createYouTubeFromTokens(tokens, redirectUrl, userId, onTokens) {
+  const client = await createOAuthClientFromRedirect(redirectUrl, userId);
   if (!client || !tokens) return null;
   client.setCredentials(tokens);
   client.on('tokens', nextTokens => onTokens?.({ ...tokens, ...nextTokens }));
   return google.youtube({ version: 'v3', auth: client });
 }
 
-function createAuthedYouTube(req) {
-  const client = createOAuthClient(req);
+async function createAuthedYouTube(req) {
+  const client = await createOAuthClient(req);
   if (!client || !req.session.tokens) return null;
   client.setCredentials(req.session.tokens);
   client.on('tokens', tokens => {
@@ -253,11 +289,11 @@ function rememberRefreshContext(req) {
   });
 }
 
-function requireYouTube(req, res) {
-  const youtube = createAuthedYouTube(req);
+async function requireYouTube(req, res) {
+  const youtube = await createAuthedYouTube(req);
   if (!youtube) {
     res.status(401).json({
-      error: hasGoogleConfig(req)
+      error: (await hasGoogleConfig(req))
         ? 'Connect YouTube first.'
         : 'Google OAuth is not configured. Open Configuration and add a client ID and secret.'
     });
@@ -476,7 +512,7 @@ async function refreshVideoIndex(userId, youtube, subscriptions, options = {}) {
     videos,
     errors
   };
-  writeIndex(userId, index);
+  await writeIndex(userId, index);
   return index;
 }
 
@@ -489,9 +525,9 @@ async function refreshVideoIndexOnce(key, userId, youtube, subscriptions, option
   return refresh;
 }
 
-function maybeRefreshIndexInBackground(req, youtube, subscriptions) {
+async function maybeRefreshIndexInBackground(req, youtube, subscriptions) {
   const userId = getUserId(req);
-  const index = readIndex(userId);
+  const index = await readIndex(userId);
   if (!isIndexStale(index)) return;
   refreshVideoIndexOnce(req.sessionID, userId, youtube, subscriptions).catch(error => {
     console.error('Background index refresh failed:', error.message);
@@ -548,121 +584,141 @@ function searchIndex(index, query) {
     .slice(0, 50);
 }
 
-app.get('/api/auth/status', (req, res) => {
-  const userId = getUserId(req);
-  const trial = userId ? getTrialInfo(userId) : null;
-  const googleConfig = userId ? getGoogleConfig(userId) : { source: 'none' };
-  res.json({
-    connected: Boolean(req.session.tokens),
-    configured: hasGoogleConfig(req),
-    redirectUri: getRedirectUrl(req),
-    clerkConfigured: CLERK_CONFIGURED,
-    clerkPublishableKey: process.env.CLERK_PUBLISHABLE_KEY || '',
-    signedIn: Boolean(userId),
-    userId,
-    googleConfigSource: googleConfig.source,
-    personalConfigured: userId ? hasPersonalGoogleConfig(userId) : false,
-    usingDefaultGoogleConfig: googleConfig.source === 'trial',
-    defaultGoogleTrial: trial,
-    annualPriceUsd: 36,
-    paymentLinkUrl: process.env.PAYMENT_LINK_URL || ''
-  });
-});
-
-app.get('/api/config/google', (req, res) => {
-  const userId = requireAppUser(req, res);
-  if (!userId) return;
-
-  const config = getGoogleConfig(userId);
-  const trial = getTrialInfo(userId);
-  res.json({
-    configured: Boolean(config.clientId && config.clientSecret),
-    personalConfigured: hasPersonalGoogleConfig(userId),
-    usingDefaultGoogleConfig: config.source === 'trial',
-    googleConfigSource: config.source,
-    clientId: getConfigValue(userId, 'GOOGLE_CLIENT_ID') || '',
-    hasClientSecret: Boolean(getConfigValue(userId, 'GOOGLE_CLIENT_SECRET')),
-    defaultGoogleTrial: trial,
-    annualPriceUsd: 36,
-    paymentLinkUrl: process.env.PAYMENT_LINK_URL || '',
-    redirectUri: getRedirectUrl(req)
-  });
-});
-
-app.post('/api/config/google/use-default', (req, res) => {
-  const userId = requireAppUser(req, res);
-  if (!userId) return;
-
-  const trial = getTrialInfo(userId);
-  if (!trial.available) {
-    res.status(400).json({ error: 'The shared Google OAuth client is not configured on this server.' });
-    return;
-  }
-  if (trial.expired) {
-    res.status(403).json({
-      error: 'Your free shared-key trial has ended. Add your own Google client ID and secret in Configuration to keep using the app.'
+app.get('/api/auth/status', async (req, res, next) => {
+  try {
+    const userId = getUserId(req);
+    const trial = userId ? await getTrialInfo(userId) : null;
+    const googleConfig = userId ? await getGoogleConfig(userId) : { source: 'none' };
+    res.json({
+      connected: Boolean(req.session.tokens),
+      configured: await hasGoogleConfig(req),
+      redirectUri: getRedirectUrl(req),
+      clerkConfigured: CLERK_CONFIGURED,
+      clerkPublishableKey: process.env.CLERK_PUBLISHABLE_KEY || '',
+      signedIn: Boolean(userId),
+      userId,
+      googleConfigSource: googleConfig.source,
+      personalConfigured: userId ? await hasPersonalGoogleConfig(userId) : false,
+      usingDefaultGoogleConfig: googleConfig.source === 'trial',
+      defaultGoogleTrial: trial,
+      annualPriceUsd: 36,
+      paymentLinkUrl: process.env.PAYMENT_LINK_URL || ''
     });
-    return;
+  } catch (error) {
+    next(error);
   }
-  if (!trial.startedAt) {
-    setConfigValues(userId, {
-      DEFAULT_GOOGLE_TRIAL_STARTED_AT: new Date().toISOString()
+});
+
+app.get('/api/config/google', async (req, res, next) => {
+  try {
+    const userId = requireAppUser(req, res);
+    if (!userId) return;
+
+    const config = await getGoogleConfig(userId);
+    const trial = await getTrialInfo(userId);
+    res.json({
+      configured: Boolean(config.clientId && config.clientSecret),
+      personalConfigured: await hasPersonalGoogleConfig(userId),
+      usingDefaultGoogleConfig: config.source === 'trial',
+      googleConfigSource: config.source,
+      clientId: (await getConfigValue(userId, 'GOOGLE_CLIENT_ID')) || '',
+      hasClientSecret: Boolean(await getConfigValue(userId, 'GOOGLE_CLIENT_SECRET')),
+      defaultGoogleTrial: trial,
+      annualPriceUsd: 36,
+      paymentLinkUrl: process.env.PAYMENT_LINK_URL || '',
+      redirectUri: getRedirectUrl(req)
     });
+  } catch (error) {
+    next(error);
   }
-
-  const nextTrial = getTrialInfo(userId);
-  res.json({
-    ok: true,
-    configured: true,
-    usingDefaultGoogleConfig: true,
-    defaultGoogleTrial: nextTrial,
-    annualPriceUsd: 36,
-    redirectUri: getRedirectUrl(req)
-  });
 });
 
-app.post('/api/config/google', (req, res) => {
-  const userId = requireAppUser(req, res);
-  if (!userId) return;
+app.post('/api/config/google/use-default', async (req, res, next) => {
+  try {
+    const userId = requireAppUser(req, res);
+    if (!userId) return;
 
-  const clientId = String(req.body.clientId || '').trim();
-  const clientSecret = String(req.body.clientSecret || '').trim();
+    const trial = await getTrialInfo(userId);
+    if (!trial.available) {
+      res.status(400).json({ error: 'The shared Google OAuth client is not configured on this server.' });
+      return;
+    }
+    if (trial.expired) {
+      res.status(403).json({
+        error: 'Your free shared-key trial has ended. Add your own Google client ID and secret in Configuration to keep using the app.'
+      });
+      return;
+    }
+    if (!trial.startedAt) {
+      await setConfigValues(userId, {
+        DEFAULT_GOOGLE_TRIAL_STARTED_AT: new Date().toISOString()
+      });
+    }
 
-  const existing = getGoogleConfig(userId);
-  if (!clientId || (!clientSecret && !existing.clientSecret)) {
-    res.status(400).json({ error: 'Client ID and client secret are required. If you changed the client ID, paste the matching secret too.' });
-    return;
+    const nextTrial = await getTrialInfo(userId);
+    res.json({
+      ok: true,
+      configured: true,
+      usingDefaultGoogleConfig: true,
+      defaultGoogleTrial: nextTrial,
+      annualPriceUsd: 36,
+      redirectUri: getRedirectUrl(req)
+    });
+  } catch (error) {
+    next(error);
   }
-
-  const values = { GOOGLE_CLIENT_ID: clientId };
-  if (clientSecret) values.GOOGLE_CLIENT_SECRET = clientSecret;
-  setConfigValues(userId, values);
-
-  res.json({
-    ok: true,
-    configured: true,
-    usingDefaultGoogleConfig: false,
-    googleConfigSource: 'personal',
-    redirectUri: getRedirectUrl(req)
-  });
 });
 
-app.get('/auth/youtube', (req, res) => {
-  const userId = requireAppUser(req, res);
-  if (!userId) return;
+app.post('/api/config/google', async (req, res, next) => {
+  try {
+    const userId = requireAppUser(req, res);
+    if (!userId) return;
 
-  const client = createOAuthClient(req);
-  if (!client) {
-    res.redirect('/?error=missing-google-config');
-    return;
+    const clientId = String(req.body.clientId || '').trim();
+    const clientSecret = String(req.body.clientSecret || '').trim();
+
+    const existing = await getGoogleConfig(userId);
+    if (!clientId || (!clientSecret && !existing.clientSecret)) {
+      res.status(400).json({ error: 'Client ID and client secret are required. If you changed the client ID, paste the matching secret too.' });
+      return;
+    }
+
+    const values = { GOOGLE_CLIENT_ID: clientId };
+    if (clientSecret) values.GOOGLE_CLIENT_SECRET = clientSecret;
+    await setConfigValues(userId, values);
+
+    res.json({
+      ok: true,
+      configured: true,
+      usingDefaultGoogleConfig: false,
+      googleConfigSource: 'personal',
+      redirectUri: getRedirectUrl(req)
+    });
+  } catch (error) {
+    next(error);
   }
+});
 
-  const url = client.generateAuthUrl({
-    access_type: 'offline',
-    prompt: 'consent',
-    scope: [YOUTUBE_SCOPE]
-  });
-  res.redirect(url);
+app.get('/auth/youtube', async (req, res, next) => {
+  try {
+    const userId = requireAppUser(req, res);
+    if (!userId) return;
+
+    const client = await createOAuthClient(req);
+    if (!client) {
+      res.redirect('/?error=missing-google-config');
+      return;
+    }
+
+    const url = client.generateAuthUrl({
+      access_type: 'offline',
+      prompt: 'consent',
+      scope: [YOUTUBE_SCOPE]
+    });
+    res.redirect(url);
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get(REDIRECT_PATH, async (req, res, next) => {
@@ -670,7 +726,7 @@ app.get(REDIRECT_PATH, async (req, res, next) => {
     const userId = requireAppUser(req, res);
     if (!userId) return;
 
-    const client = createOAuthClient(req);
+    const client = await createOAuthClient(req);
     if (!client || !req.query.code) {
       res.redirect('/?error=oauth-failed');
       return;
@@ -690,39 +746,45 @@ app.post('/auth/logout', (req, res) => {
 
 app.get('/api/subscriptions', async (req, res, next) => {
   try {
-    const youtube = requireYouTube(req, res);
+    const youtube = await requireYouTube(req, res);
     if (!youtube) return;
 
     const subscriptions = await listAllSubscriptions(youtube);
     req.session.subscriptions = subscriptions;
-    maybeRefreshIndexInBackground(req, youtube, subscriptions);
+    maybeRefreshIndexInBackground(req, youtube, subscriptions).catch(error => {
+      console.error('Background index refresh check failed:', error.message);
+    });
     res.json({ subscriptions });
   } catch (error) {
     next(error);
   }
 });
 
-app.get('/api/index/status', (req, res) => {
-  const userId = requireAppUser(req, res);
-  if (!userId) return;
-  const index = readIndex(userId);
+app.get('/api/index/status', async (req, res, next) => {
+  try {
+    const userId = requireAppUser(req, res);
+    if (!userId) return;
+    const index = await readIndex(userId);
 
-  res.json({
-    refreshedAt: index.refreshedAt,
-    stale: isIndexStale(index),
-    channelCount: index.channels?.length || 0,
-    videoCount: index.videos?.length || 0,
-    uploadsPerChannel: index.uploadsPerChannel || INDEX_UPLOADS_PER_CHANNEL,
-    refreshMinutes: INDEX_REFRESH_MINUTES,
-    requestDelayMs: INDEX_REQUEST_DELAY_MS
-  });
+    res.json({
+      refreshedAt: index.refreshedAt,
+      stale: isIndexStale(index),
+      channelCount: index.channels?.length || 0,
+      videoCount: index.videos?.length || 0,
+      uploadsPerChannel: index.uploadsPerChannel || INDEX_UPLOADS_PER_CHANNEL,
+      refreshMinutes: INDEX_REFRESH_MINUTES,
+      requestDelayMs: INDEX_REQUEST_DELAY_MS
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.post('/api/index/refresh', async (req, res, next) => {
   try {
     const userId = requireAppUser(req, res);
     if (!userId) return;
-    const youtube = requireYouTube(req, res);
+    const youtube = await requireYouTube(req, res);
     if (!youtube) return;
 
     const subscriptions = req.session.subscriptions || (await listAllSubscriptions(youtube));
@@ -745,7 +807,7 @@ app.post('/api/index/refresh', async (req, res, next) => {
 app.get('/api/channels/:channelId/latest', async (req, res, next) => {
   try {
     const maxResults = Math.min(Number(req.query.maxResults || 8), 12);
-    const youtube = requireYouTube(req, res);
+    const youtube = await requireYouTube(req, res);
     if (!youtube) return;
 
     res.json(await getChannelBundle(youtube, req.params.channelId, maxResults));
@@ -764,25 +826,29 @@ app.get('/api/search', async (req, res, next) => {
 
     const userId = requireAppUser(req, res);
     if (!userId) return;
-    const index = readIndex(userId);
+    const index = await readIndex(userId);
     if (!index.videos?.length) {
-      const youtube = requireYouTube(req, res);
+      const youtube = await requireYouTube(req, res);
       if (!youtube) return;
 
       const subscriptions = req.session.subscriptions || (await listAllSubscriptions(youtube));
       req.session.subscriptions = subscriptions;
-      maybeRefreshIndexInBackground(req, youtube, subscriptions);
+      maybeRefreshIndexInBackground(req, youtube, subscriptions).catch(error => {
+        console.error('Background index refresh check failed:', error.message);
+      });
       res.status(409).json({
         error: 'Your searchable video index is empty. Refresh the index once, then search again.'
       });
       return;
     }
 
-    const youtube = createAuthedYouTube(req);
+    const youtube = await createAuthedYouTube(req);
     const subscriptions = req.session.subscriptions || index.channels || [];
     if (youtube) {
       rememberRefreshContext(req);
-      maybeRefreshIndexInBackground(req, youtube, subscriptions);
+      maybeRefreshIndexInBackground(req, youtube, subscriptions).catch(error => {
+        console.error('Background index refresh check failed:', error.message);
+      });
     }
 
     const results = searchIndex(index, query);
@@ -828,12 +894,12 @@ if (!IS_VERCEL) {
   });
 }
 
-if (!IS_VERCEL) setInterval(() => {
+if (!IS_VERCEL) setInterval(async () => {
   for (const [sessionId, context] of activeRefreshContexts.entries()) {
-    const index = readIndex(context.userId);
+    const index = await readIndex(context.userId);
     if (!isIndexStale(index)) continue;
 
-    const youtube = createYouTubeFromTokens(context.tokens, context.redirectUrl, context.userId, tokens => {
+    const youtube = await createYouTubeFromTokens(context.tokens, context.redirectUrl, context.userId, tokens => {
       activeRefreshContexts.set(sessionId, { ...context, tokens });
     });
     if (!youtube || !index.channels?.length) continue;
