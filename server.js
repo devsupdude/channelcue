@@ -113,12 +113,6 @@ function getDefaultGoogleConfig() {
   };
 }
 
-function maskClientId(clientId = '') {
-  if (!clientId) return '';
-  if (clientId.length <= 18) return clientId;
-  return `${clientId.slice(0, 8)}...${clientId.slice(-16)}`;
-}
-
 async function getTrialInfo(userId) {
   const startedAt = await getConfigValue(userId, 'DEFAULT_GOOGLE_TRIAL_STARTED_AT');
   const defaultConfig = getDefaultGoogleConfig();
@@ -131,8 +125,7 @@ async function getTrialInfo(userId) {
       expired: false,
       startedAt: null,
       expiresAt: null,
-      daysRemaining: available ? DEFAULT_GOOGLE_TRIAL_DAYS : 0,
-      clientIdPreview: maskClientId(defaultConfig.clientId)
+      daysRemaining: available ? DEFAULT_GOOGLE_TRIAL_DAYS : 0
     };
   }
 
@@ -149,8 +142,7 @@ async function getTrialInfo(userId) {
     expired: available && !active,
     startedAt,
     expiresAt: expires.toISOString(),
-    daysRemaining,
-    clientIdPreview: maskClientId(defaultConfig.clientId)
+    daysRemaining
   };
 }
 
