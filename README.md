@@ -118,7 +118,7 @@ You can let signed-in users try the app with your shared Google OAuth client:
 DEFAULT_GOOGLE_CLIENT_ID=
 DEFAULT_GOOGLE_CLIENT_SECRET=
 DEFAULT_GOOGLE_TRIAL_DAYS=7
-PAYMENT_LINK_URL=
+PAYMENT_LINK_URL=https://link.fastpaydirect.com/payment-link/6a174c92c3ea3a19f0bd8c84
 ```
 
 After the trial expires, users must save their own Google client ID and client secret in **Configuration**. The UI explains the $36/year price point as $3 per month; payment processing is not implemented yet.

@@ -19,6 +19,12 @@ const INDEX_REFRESH_MINUTES = Number(process.env.INDEX_REFRESH_MINUTES || 60);
 const INDEX_REQUEST_DELAY_MS = Number(process.env.INDEX_REQUEST_DELAY_MS || 100);
 const DEFAULT_GOOGLE_TRIAL_DAYS = Number(process.env.DEFAULT_GOOGLE_TRIAL_DAYS || 7);
 const INDEX_REFRESH_MS = Math.max(INDEX_REFRESH_MINUTES, 5) * 60 * 1000;
+const CURRENT_PAYMENT_LINK_URL = 'https://link.fastpaydirect.com/payment-link/6a174c92c3ea3a19f0bd8c84';
+const LEGACY_PAYMENT_LINK_URL = 'https://link.fastpaydirect.com/payment-link/6a167f74f4e3f699673a5df2';
+const PAYMENT_LINK_URL =
+  process.env.PAYMENT_LINK_URL && process.env.PAYMENT_LINK_URL !== LEGACY_PAYMENT_LINK_URL
+    ? process.env.PAYMENT_LINK_URL
+    : CURRENT_PAYMENT_LINK_URL;
 const DATA_DIR = IS_VERCEL ? '/tmp/channelcue' : 'data';
 const INDEX_DIR = `${DATA_DIR}/indexes`;
 const activeRefreshContexts = new Map();
@@ -679,7 +685,7 @@ app.get('/api/auth/status', async (req, res, next) => {
       usingDefaultGoogleConfig: googleConfig.source === 'trial',
       defaultGoogleTrial: trial,
       annualPriceUsd: 36,
-      paymentLinkUrl: process.env.PAYMENT_LINK_URL || ''
+      paymentLinkUrl: PAYMENT_LINK_URL
     });
   } catch (error) {
     next(error);
@@ -702,7 +708,7 @@ app.get('/api/config/google', async (req, res, next) => {
       hasClientSecret: Boolean(await getConfigValue(userId, 'GOOGLE_CLIENT_SECRET')),
       defaultGoogleTrial: trial,
       annualPriceUsd: 36,
-      paymentLinkUrl: process.env.PAYMENT_LINK_URL || '',
+      paymentLinkUrl: PAYMENT_LINK_URL,
       redirectUri: getRedirectUrl(req)
     });
   } catch (error) {
@@ -949,7 +955,7 @@ app.use((error, req, res, _next) => {
       error:
         'Sorry, we can only provide the trial while tokens are available. Please try again later or upgrade to the paid plan.',
       code: 'TRIAL_TOKENS_EXHAUSTED',
-      paymentLinkUrl: process.env.PAYMENT_LINK_URL || ''
+      paymentLinkUrl: PAYMENT_LINK_URL
     });
     return;
   }
