@@ -11,6 +11,16 @@ npm run dev
 
 Open <http://localhost:3000>.
 
+## Vercel Deployment
+
+This repo includes `vercel.json` so Vercel routes requests through the Express serverless function.
+
+Important production note: Vercel serverless file storage is temporary. The current deployment-safe fallback stores user configuration and indexes under `/tmp`, which is enough to prevent crashes and test the flow, but not enough for durable production data. Before selling this broadly, connect a managed store such as Vercel Postgres, Neon, Supabase, or another hosted database for:
+
+- per-user Google OAuth client ID/secret
+- trial start dates
+- cached video indexes
+
 ## Launch video
 
 The hero video is generated with Remotion:

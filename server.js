@@ -2,11 +2,11 @@ import 'dotenv/config';
 import express from 'express';
 import session from 'express-session';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
 import { google } from 'googleapis';
 import { clerkMiddleware, getAuth } from '@clerk/express';
 
 const PORT = Number(process.env.PORT || 3000);
+const IS_VERCEL = Boolean(process.env.VERCEL);
 const REDIRECT_PATH = '/oauth2callback';
 const YOUTUBE_SCOPE = 'https://www.googleapis.com/auth/youtube.readonly';
 const INDEX_UPLOADS_PER_CHANNEL = Number(process.env.INDEX_UPLOADS_PER_CHANNEL || 25);
@@ -14,23 +14,13 @@ const INDEX_REFRESH_MINUTES = Number(process.env.INDEX_REFRESH_MINUTES || 60);
 const INDEX_REQUEST_DELAY_MS = Number(process.env.INDEX_REQUEST_DELAY_MS || 100);
 const DEFAULT_GOOGLE_TRIAL_DAYS = Number(process.env.DEFAULT_GOOGLE_TRIAL_DAYS || 7);
 const INDEX_REFRESH_MS = Math.max(INDEX_REFRESH_MINUTES, 5) * 60 * 1000;
-const INDEX_DIR = 'data/indexes';
+const DATA_DIR = IS_VERCEL ? '/tmp/channelcue' : 'data';
+const INDEX_DIR = `${DATA_DIR}/indexes`;
 const activeRefreshContexts = new Map();
 const activeRefreshes = new Map();
 const CLERK_CONFIGURED = Boolean(process.env.CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY);
-const DB_PATH = 'data/app.db';
-mkdirSync('data', { recursive: true });
-const db = new DatabaseSync(DB_PATH);
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS app_config (
-    user_id TEXT NOT NULL,
-    key TEXT NOT NULL,
-    value TEXT NOT NULL,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, key)
-  )
-`);
+const CONFIG_PATH = `${DATA_DIR}/app-config.json`;
+mkdirSync(DATA_DIR, { recursive: true });
 
 const app = express();
 
@@ -67,26 +57,34 @@ function requireAppUser(req, res) {
   return userId;
 }
 
+function readConfigStore() {
+  if (!existsSync(CONFIG_PATH)) return {};
+  try {
+    return JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function writeConfigStore(store) {
+  mkdirSync(DATA_DIR, { recursive: true });
+  writeFileSync(CONFIG_PATH, JSON.stringify(store, null, 2), 'utf8');
+}
+
 function getConfigValue(userId, key) {
-  return db.prepare('SELECT value FROM app_config WHERE user_id = ? AND key = ?').get(userId, key)?.value;
+  return readConfigStore()[userId]?.[key]?.value;
 }
 
 function setConfigValues(userId, values) {
-  const statement = db.prepare(`
-    INSERT INTO app_config (user_id, key, value, updated_at)
-    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(user_id, key) DO UPDATE SET
-      value = excluded.value,
-      updated_at = CURRENT_TIMESTAMP
-  `);
-  db.exec('BEGIN');
-  try {
-    for (const [key, value] of Object.entries(values)) statement.run(userId, key, String(value));
-    db.exec('COMMIT');
-  } catch (error) {
-    db.exec('ROLLBACK');
-    throw error;
+  const store = readConfigStore();
+  store[userId] ||= {};
+  for (const [key, value] of Object.entries(values)) {
+    store[userId][key] = {
+      value: String(value),
+      updatedAt: new Date().toISOString()
+    };
   }
+  writeConfigStore(store);
 }
 
 function getDefaultGoogleConfig() {
@@ -824,11 +822,13 @@ app.use((error, req, res, _next) => {
   res.status(error.code || 500).json({ error: message });
 });
 
-app.listen(PORT, () => {
-  console.log(`YouTube subscription summarizer running at http://localhost:${PORT}`);
-});
+if (!IS_VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`YouTube subscription summarizer running at http://localhost:${PORT}`);
+  });
+}
 
-setInterval(() => {
+if (!IS_VERCEL) setInterval(() => {
   for (const [sessionId, context] of activeRefreshContexts.entries()) {
     const index = readIndex(context.userId);
     if (!isIndexStale(index)) continue;
@@ -843,3 +843,5 @@ setInterval(() => {
     });
   }
 }, Math.min(INDEX_REFRESH_MS, 15 * 60 * 1000));
+
+export default app;
