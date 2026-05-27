@@ -79,7 +79,15 @@ export const ChannelCueLaunch: React.FC = () => {
     extrapolateRight: 'clamp'
   });
   const searchIn = spring({ frame: frame - 210, fps, config: { damping: 18 } });
-  const finalIn = spring({ frame: frame - 390, fps, config: { damping: 16 } });
+  const sceneOut = interpolate(frame, [270, 320], [1, 0], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp'
+  });
+  const finalWash = interpolate(frame, [300, 338], [0, 0.94], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp'
+  });
+  const finalIn = spring({ frame: frame - 318, fps, config: { damping: 16 } });
 
   return (
     <AbsoluteFill style={{ background: colors.bg, overflow: 'hidden' }}>
@@ -98,7 +106,7 @@ export const ChannelCueLaunch: React.FC = () => {
           left: 105,
           top: 88,
           width: 700,
-          opacity: heroIn,
+          opacity: heroIn * sceneOut,
           transform: `translateY(${interpolate(heroIn, [0, 1], [42, 0])}px)`
         }}
       >
@@ -124,6 +132,7 @@ export const ChannelCueLaunch: React.FC = () => {
           top: 70,
           width: 790,
           height: 850,
+          opacity: sceneOut,
           transform: `translateY(${feedShift}px)`
         }}
       >
@@ -185,7 +194,7 @@ export const ChannelCueLaunch: React.FC = () => {
           top: 245,
           width: 720,
           padding: 34,
-          opacity: focusOpacity,
+          opacity: focusOpacity * sceneOut,
           transform: `scale(${interpolate(focusOpacity, [0, 1], [0.92, 1])})`
         }}
       >
@@ -210,7 +219,7 @@ export const ChannelCueLaunch: React.FC = () => {
           left: 105,
           bottom: 100,
           width: 760,
-          opacity: searchIn,
+          opacity: searchIn * sceneOut,
           transform: `translateY(${interpolate(searchIn, [0, 1], [50, 0])}px)`
         }}
       >
@@ -271,10 +280,7 @@ export const ChannelCueLaunch: React.FC = () => {
         style={{
           position: 'absolute',
           inset: 0,
-          background: `rgba(245,243,238,${interpolate(frame, [382, 420], [0, 0.92], {
-            extrapolateLeft: 'clamp',
-            extrapolateRight: 'clamp'
-          })})`
+          background: `rgba(245,243,238,${finalWash})`
         }}
       />
 

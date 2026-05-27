@@ -505,7 +505,7 @@ function setupHeroVideoFade() {
 
   const updateVideoVisibility = () => {
     const duration = els.heroVideo.duration || 18;
-    const fadeAt = Math.max(0, duration - 8.4);
+    const fadeAt = Math.max(0, duration - 7.7);
     const isFinale = els.heroVideo.currentTime >= fadeAt;
     els.heroVideo.classList.toggle('fade-away', false);
     els.hero.classList.toggle('video-finale', isFinale);
