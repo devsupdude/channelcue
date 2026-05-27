@@ -2,10 +2,10 @@ import 'dotenv/config';
 import express from 'express';
 import session from 'express-session';
 import { ConvexHttpClient } from 'convex/browser';
-import { makeFunctionReference } from 'convex/server';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { google } from 'googleapis';
 import { clerkMiddleware, getAuth } from '@clerk/express';
+import { api as convexApi } from './convex/_generated/api.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const IS_VERCEL = Boolean(process.env.VERCEL);
@@ -22,13 +22,13 @@ const activeRefreshContexts = new Map();
 const activeRefreshes = new Map();
 const CLERK_CONFIGURED = Boolean(process.env.CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY);
 const CONFIG_PATH = `${DATA_DIR}/app-config.json`;
-const CONVEX_URL = process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL || '';
+const CONVEX_URL = (process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL || '').replace(/\/+$/, '');
 const convex = CONVEX_URL ? new ConvexHttpClient(CONVEX_URL) : null;
 const convexFns = {
-  getConfigValue: makeFunctionReference('appData:getConfigValue'),
-  setConfigValues: makeFunctionReference('appData:setConfigValues'),
-  getIndex: makeFunctionReference('appData:getIndex'),
-  setIndex: makeFunctionReference('appData:setIndex')
+  getConfigValue: convexApi.appData.getConfigValue,
+  setConfigValues: convexApi.appData.setConfigValues,
+  getIndex: convexApi.appData.getIndex,
+  setIndex: convexApi.appData.setIndex
 };
 mkdirSync(DATA_DIR, { recursive: true });
 
@@ -307,6 +307,11 @@ function isYouTubeQuotaError(error) {
   const response = error.response?.data;
   const message = JSON.stringify(response || error.message || '').toLowerCase();
   return error.code === 403 && message.includes('quota');
+}
+
+function isConvexSetupError(error) {
+  const message = String(error.message || '').toLowerCase();
+  return message.includes('could not find public function') || message.includes('did you forget to run `npx convex dev`');
 }
 
 function asNumber(value) {
@@ -873,6 +878,14 @@ app.use((error, req, res, _next) => {
         'Sorry, we can only provide the trial while tokens are available. Please try again later or upgrade to the paid plan.',
       code: 'TRIAL_TOKENS_EXHAUSTED',
       paymentLinkUrl: process.env.PAYMENT_LINK_URL || ''
+    });
+    return;
+  }
+
+  if (isConvexSetupError(error)) {
+    res.status(503).json({
+      error:
+        'Convex storage is connected, but the ChannelCue Convex functions are not deployed yet. Run npx convex dev --once locally, or npx convex deploy for Vercel, then try again.'
     });
     return;
   }

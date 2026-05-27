@@ -1,4 +1,4 @@
-import { mutationGeneric as mutation, queryGeneric as query } from "convex/server";
+import { mutation, query } from "./_generated/server.js";
 import { v } from "convex/values";
 
 export const getConfigValue = query({
