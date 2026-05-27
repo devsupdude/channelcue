@@ -198,9 +198,10 @@ button,
 .hero-shade {
   position: absolute;
   inset: 0;
+  transition: background 520ms ease, opacity 520ms ease;
   background:
-    linear-gradient(90deg, rgba(245, 243, 238, 0.96), rgba(245, 243, 238, 0.78) 40%, rgba(245, 243, 238, 0.08)),
-    linear-gradient(0deg, rgba(27, 35, 33, 0.25), transparent 45%);
+    linear-gradient(90deg, rgba(245, 243, 238, 1), rgba(245, 243, 238, 0.98) 54%, rgba(245, 243, 238, 0.42) 76%, rgba(245, 243, 238, 0.06)),
+    linear-gradient(0deg, rgba(27, 35, 33, 0.18), transparent 45%);
 }
 
 .hero-content {
@@ -211,14 +212,21 @@ button,
   max-width: 680px;
   min-height: min(760px, calc(100vh - 72px));
   padding: 56px;
+  background: linear-gradient(90deg, rgba(245, 243, 238, 0.96), rgba(245, 243, 238, 0.86) 76%, rgba(245, 243, 238, 0));
   opacity: 1;
-  transition: opacity 420ms ease, transform 420ms ease;
+  transition: opacity 420ms ease, transform 420ms ease, background 420ms ease;
 }
 
 .hero.video-finale .hero-content {
   opacity: 0;
   pointer-events: none;
   transform: translateY(14px);
+}
+
+.hero.video-finale .hero-shade {
+  background:
+    linear-gradient(90deg, rgba(245, 243, 238, 0.1), rgba(245, 243, 238, 0.08) 58%, rgba(245, 243, 238, 0.02)),
+    linear-gradient(0deg, rgba(245, 243, 238, 0.1), transparent 48%);
 }
 
 .hero-content p:not(.eyebrow):not(.hero-message) {
@@ -606,10 +614,15 @@ input:focus {
 
   .hero-content {
     padding: 28px;
+    background: linear-gradient(0deg, rgba(245, 243, 238, 0.94), rgba(245, 243, 238, 0.9) 72%, rgba(245, 243, 238, 0.28));
   }
 
   .hero-shade {
-    background: linear-gradient(0deg, rgba(245, 243, 238, 0.94), rgba(245, 243, 238, 0.72));
+    background: linear-gradient(0deg, rgba(245, 243, 238, 0.98), rgba(245, 243, 238, 0.88));
+  }
+
+  .hero.video-finale .hero-shade {
+    background: linear-gradient(0deg, rgba(245, 243, 238, 0.08), rgba(245, 243, 238, 0.04));
   }
 
   .video-card,
