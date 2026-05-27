@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ChannelCue</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="workspace">
+        <header class="topbar">
+          <a class="brand" href="#top">ChannelCue</a>
+          <div class="actions">
+            <button id="authButton" class="secondary" type="button">Get Started</button>
+            <button id="configButton" class="secondary" type="button">Configuration</button>
+            <button id="connectButton" class="primary" type="button">Connect YouTube</button>
+            <button id="logoutButton" class="secondary hidden" type="button">Disconnect</button>
+            <button id="subBriefLogoutButton" class="secondary hidden" type="button">Log out</button>
+          </div>
+        </header>
+
+        <section id="top" class="hero">
+          <video id="heroVideo" class="hero-video" autoplay muted loop playsinline poster="">
+            <source src="/assets/channelcue-launch.mp4" type="video/mp4" />
+          </video>
+          <div class="hero-shade"></div>
+          <div class="hero-content">
+            <p class="eyebrow">ChannelCue Pro</p>
+            <h1>Watch your subscriptions without wandering.</h1>
+            <p>
+              Organize the channels you already chose, search across recent uploads, and stay out of YouTube land.
+            </p>
+            <div class="hero-actions">
+              <button id="heroStartButton" class="primary" type="button">Get Started</button>
+              <a id="heroPayButton" class="primary hidden" href="#" aria-disabled="true">Pay Now</a>
+              <button id="heroConfigButton" class="secondary" type="button">Google setup</button>
+            </div>
+            <p id="heroMessage" class="hero-message">7 days free, then $36/year with all updates included.</p>
+          </div>
+        </section>
+
+        <section id="notice" class="notice hidden"></section>
+
+        <section id="accountBanner" class="account-banner hidden">
+          <div>
+            <strong id="accountBannerTitle">Welcome to ChannelCue</strong>
+            <p id="accountBannerMessage">Connect YouTube to load your subscribed channels.</p>
+          </div>
+          <div class="account-banner-actions">
+            <button id="accountConnectButton" class="primary" type="button">Connect YouTube</button>
+            <button id="accountIndexButton" class="secondary hidden" type="button">Refresh index</button>
+            <a id="accountPayLink" class="primary hidden" href="#" aria-disabled="true">Pay Now</a>
+          </div>
+        </section>
+
+        <section id="setupPanel" class="setup-panel hidden">
+          <div>
+            <h2>Configuration</h2>
+            <p class="close-hint">Click Configuration again to close this window.</p>
+            <p class="field-note">Clerk login</p>
+            <p id="clerkStatus">Add Clerk keys to the server environment to require real user login.</p>
+            <div class="tab-list" role="tablist" aria-label="Configuration tabs">
+              <button id="billingTab" class="tab-button active" type="button">Trial</button>
+              <button id="googleTab" class="tab-button" type="button">Google setup</button>
+            </div>
+            <section id="billingPane" class="tab-pane">
+              <p>
+                Start with a 7-day trial using the shared key. After that, ChannelCue Pro is $36/year with every update included.
+              </p>
+              <p id="postTrialThanks" class="thanks-message hidden">
+                Thanks for using ChannelCue Pro. Tell your friends if this helped you escape YouTube land.
+              </p>
+            </section>
+            <section id="googlePane" class="tab-pane hidden">
+              <p>
+                After the trial, create your own Google OAuth web client and save its client ID and secret here. You can return to Configuration any time to replace or update these values.
+              </p>
+              <ol class="setup-steps">
+                <li>Open Google Cloud Console and create or select a project.</li>
+                <li>Go to APIs & Services, then enable YouTube Data API v3.</li>
+                <li>Go to Credentials and create an OAuth client ID.</li>
+                <li>Choose Web application as the application type.</li>
+                <li>Add the JavaScript origin and redirect URI below.</li>
+                <li>Copy the client ID and client secret into this form, then save.</li>
+              </ol>
+              <p class="field-note">Authorized JavaScript origin:</p>
+              <code>http://localhost:3000</code>
+              <p class="field-note">Authorized redirect URI:</p>
+              <code id="redirectUri">http://localhost:3000/oauth2callback</code>
+            </section>
+          </div>
+          <form id="setupForm" class="setup-form">
+            <label>
+              <span>Google client ID</span>
+              <input id="clientIdInput" autocomplete="off" required />
+            </label>
+            <label>
+              <span>Google client secret</span>
+              <input id="clientSecretInput" autocomplete="off" type="password" />
+            </label>
+            <section id="trialPanel" class="trial-panel hidden">
+              <div>
+                <strong>Try with my Google key</strong>
+                <p id="trialStatus">Use the shared key for a short trial. After that, add your own Google credentials to continue.</p>
+              </div>
+              <button id="useDefaultKeyButton" class="secondary" type="button">Use My Key</button>
+            </section>
+            <section class="pricing-note">
+              <strong>$36/year after the trial</strong>
+              <p>That is $3 per month, with all updates included. Continued use requires your own Google OAuth client ID and secret.</p>
+            </section>
+            <div class="setup-actions">
+              <a class="secondary" href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">Open Google Cloud</a>
+              <button class="primary" type="submit">Save configuration</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="controls">
+          <label>
+            <span>Subscribed channel</span>
+            <select id="channelSelect">
+              <option value="">Connect YouTube to load channels</option>
+            </select>
+          </label>
+          <form id="searchForm" class="search">
+            <label>
+              <span>Search subscribed channels</span>
+              <input id="searchInput" name="q" type="search" placeholder="AI hardware, climate, cameras..." />
+            </label>
+            <button id="searchButton" class="primary" type="submit">Search</button>
+          </form>
+        </section>
+
+        <section class="index-bar">
+          <div>
+            <strong>Search index</strong>
+            <span id="indexStatus">Connect YouTube to build the searchable index.</span>
+          </div>
+          <button id="refreshIndexButton" class="secondary" type="button">Refresh index</button>
+        </section>
+
+        <section class="grid">
+          <aside class="panel channel-panel">
+            <div id="channelEmpty" class="empty">
+              Pick a channel to see the latest videos and a compact channel snapshot.
+            </div>
+            <div id="channelDetails" class="hidden"></div>
+          </aside>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>Latest videos</h2>
+              <span id="latestMeta"></span>
+            </div>
+            <div id="videoList" class="video-list"></div>
+          </section>
+        </section>
+
+        <section class="panel search-results">
+          <div class="panel-heading">
+            <h2>Cached topic search</h2>
+            <span id="searchMeta"></span>
+          </div>
+          <div id="searchStatus" class="inline-status hidden" role="status" aria-live="polite"></div>
+          <div id="searchResults" class="video-list compact"></div>
+        </section>
+      </section>
+    </main>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
