@@ -41,6 +41,7 @@ const convexFns = {
 mkdirSync(DATA_DIR, { recursive: true });
 
 const app = express();
+app.set('trust proxy', 1);
 
 app.use(express.json());
 app.use(
@@ -305,7 +306,11 @@ function delay(ms) {
 }
 
 function getRedirectUrl(req) {
-  return `${req.protocol}://${req.get('host')}${REDIRECT_PATH}`;
+  const forwardedProto = String(req.get('x-forwarded-proto') || '').split(',')[0].trim();
+  const forwardedHost = String(req.get('x-forwarded-host') || '').split(',')[0].trim();
+  const protocol = forwardedProto || req.protocol;
+  const host = forwardedHost || req.get('host');
+  return `${protocol}://${host}${REDIRECT_PATH}`;
 }
 
 async function createOAuthClient(req) {
