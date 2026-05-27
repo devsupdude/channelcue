@@ -3,10 +3,13 @@ import express from 'express';
 import session from 'express-session';
 import { ConvexHttpClient } from 'convex/browser';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { google } from 'googleapis';
 import { clerkMiddleware, getAuth } from '@clerk/express';
 import { api as convexApi } from './convex/_generated/api.js';
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
 const IS_VERCEL = Boolean(process.env.VERCEL);
 const REDIRECT_PATH = '/oauth2callback';
@@ -22,6 +25,8 @@ const activeRefreshContexts = new Map();
 const activeRefreshes = new Map();
 const CLERK_CONFIGURED = Boolean(process.env.CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY);
 const CONFIG_PATH = `${DATA_DIR}/app-config.json`;
+const PUBLIC_DIR = join(__dirname, 'public');
+const CLERK_BROWSER_DIR = join(__dirname, 'node_modules', '@clerk', 'clerk-js', 'dist');
 const CONVEX_URL = (process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL || '').replace(/\/+$/, '');
 const convex = CONVEX_URL ? new ConvexHttpClient(CONVEX_URL) : null;
 const convexFns = {
@@ -47,8 +52,8 @@ app.use(
   })
 );
 if (CLERK_CONFIGURED) app.use(clerkMiddleware());
-app.use('/vendor/clerk', express.static('node_modules/@clerk/clerk-js/dist'));
-app.use(express.static('public'));
+app.use('/vendor/clerk', express.static(CLERK_BROWSER_DIR));
+app.use(express.static(PUBLIC_DIR));
 
 function getUserId(req) {
   if (!CLERK_CONFIGURED) {
