@@ -259,9 +259,12 @@ function renderTrial(config) {
   const trial = config?.defaultGoogleTrial;
   els.trialPanel.classList.toggle('hidden', !trial?.available);
   if (!trial?.available) return;
+  const clientIdNote = trial.clientIdPreview
+    ? ` Shared Google client ID: ${trial.clientIdPreview}.`
+    : '';
 
   if (config.usingDefaultGoogleConfig && trial.active) {
-    els.trialStatus.textContent = `Shared key trial active. ${trial.daysRemaining} day${trial.daysRemaining === 1 ? '' : 's'} remaining.`;
+    els.trialStatus.textContent = `Shared key trial active. ${trial.daysRemaining} day${trial.daysRemaining === 1 ? '' : 's'} remaining.${clientIdNote}`;
     els.useDefaultKeyButton.textContent = 'Trial active';
     els.useDefaultKeyButton.disabled = true;
     return;
@@ -275,7 +278,7 @@ function renderTrial(config) {
     return;
   }
 
-  els.trialStatus.textContent = `Use the shared Google key free for ${trial.daysRemaining || 7} days. After that, add your own credentials or continue for $${config.annualPriceUsd || 36}/year.`;
+  els.trialStatus.textContent = `Use the shared Google key free for ${trial.daysRemaining || 7} days.${clientIdNote} After that, add your own credentials or continue for $${config.annualPriceUsd || 36}/year.`;
   els.useDefaultKeyButton.textContent = 'Use My Key';
   els.useDefaultKeyButton.disabled = false;
   renderHeroState(config);
