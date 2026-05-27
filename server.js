@@ -19,12 +19,7 @@ const INDEX_REFRESH_MINUTES = Number(process.env.INDEX_REFRESH_MINUTES || 60);
 const INDEX_REQUEST_DELAY_MS = Number(process.env.INDEX_REQUEST_DELAY_MS || 100);
 const DEFAULT_GOOGLE_TRIAL_DAYS = Number(process.env.DEFAULT_GOOGLE_TRIAL_DAYS || 7);
 const INDEX_REFRESH_MS = Math.max(INDEX_REFRESH_MINUTES, 5) * 60 * 1000;
-const CURRENT_PAYMENT_LINK_URL = 'https://link.fastpaydirect.com/payment-link/6a174c92c3ea3a19f0bd8c84';
-const LEGACY_PAYMENT_LINK_URL = 'https://link.fastpaydirect.com/payment-link/6a167f74f4e3f699673a5df2';
-const PAYMENT_LINK_URL =
-  process.env.PAYMENT_LINK_URL && process.env.PAYMENT_LINK_URL !== LEGACY_PAYMENT_LINK_URL
-    ? process.env.PAYMENT_LINK_URL
-    : CURRENT_PAYMENT_LINK_URL;
+const PAYMENT_LINK_URL = process.env.PAYMENT_LINK_URL || '';
 const DATA_DIR = IS_VERCEL ? '/tmp/channelcue' : 'data';
 const INDEX_DIR = `${DATA_DIR}/indexes`;
 const activeRefreshContexts = new Map();
