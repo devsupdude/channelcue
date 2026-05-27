@@ -12,5 +12,19 @@ export default defineSchema({
     userId: v.string(),
     index: v.any(),
     updatedAt: v.string()
-  }).index("by_user", ["userId"])
+  }).index("by_user", ["userId"]),
+  videoIndexMetas: defineTable({
+    userId: v.string(),
+    meta: v.any(),
+    updatedAt: v.string()
+  }).index("by_user", ["userId"]),
+  videoIndexChunks: defineTable({
+    userId: v.string(),
+    kind: v.string(),
+    chunkIndex: v.number(),
+    items: v.any(),
+    updatedAt: v.string()
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_kind_chunk", ["userId", "kind", "chunkIndex"])
 });

@@ -3,5 +3,7 @@ node_modules/
 data/
 .DS_Store
 npm-debug.log*
+convex-logs.*
+smoke.*
 
 .env.local

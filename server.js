@@ -33,7 +33,9 @@ const convexFns = {
   getConfigValue: convexApi.appData.getConfigValue,
   setConfigValues: convexApi.appData.setConfigValues,
   getIndex: convexApi.appData.getIndex,
-  setIndex: convexApi.appData.setIndex
+  setIndex: convexApi.appData.setIndex,
+  replaceIndexStart: convexApi.appData.replaceIndexStart,
+  setIndexChunk: convexApi.appData.setIndexChunk
 };
 mkdirSync(DATA_DIR, { recursive: true });
 
@@ -84,6 +86,38 @@ function readConfigStore() {
 function writeConfigStore(store) {
   mkdirSync(DATA_DIR, { recursive: true });
   writeFileSync(CONFIG_PATH, JSON.stringify(store, null, 2), 'utf8');
+}
+
+function toConvexValue(value) {
+  if (value === undefined) return null;
+  if (typeof value === 'number' && !Number.isFinite(value)) return null;
+  if (Array.isArray(value)) return value.map(item => toConvexValue(item));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, toConvexValue(item)])
+    );
+  }
+  return value;
+}
+
+function chunkForConvex(items = [], maxBytes = 500_000) {
+  const chunks = [];
+  let current = [];
+  let currentBytes = 2;
+
+  for (const item of items) {
+    const itemBytes = Buffer.byteLength(JSON.stringify(item), 'utf8') + 1;
+    if (current.length && currentBytes + itemBytes > maxBytes) {
+      chunks.push(current);
+      current = [];
+      currentBytes = 2;
+    }
+    current.push(item);
+    currentBytes += itemBytes;
+  }
+
+  if (current.length) chunks.push(current);
+  return chunks;
 }
 
 async function getConfigValue(userId, key) {
@@ -225,7 +259,35 @@ async function readIndex(userId) {
 
 async function writeIndex(userId, index) {
   if (convex) {
-    await convex.mutation(convexFns.setIndex, { userId, index });
+    const cleanIndex = toConvexValue(index);
+    const { channels = [], videos = [], ...meta } = cleanIndex;
+    await convex.mutation(convexFns.replaceIndexStart, {
+      userId,
+      meta: {
+        ...meta,
+        channelCount: channels.length,
+        videoCount: videos.length
+      }
+    });
+
+    const channelChunks = chunkForConvex(channels);
+    const videoChunks = chunkForConvex(videos);
+    for (const [chunkIndex, items] of channelChunks.entries()) {
+      await convex.mutation(convexFns.setIndexChunk, {
+        userId,
+        kind: 'channels',
+        chunkIndex,
+        items
+      });
+    }
+    for (const [chunkIndex, items] of videoChunks.entries()) {
+      await convex.mutation(convexFns.setIndexChunk, {
+        userId,
+        kind: 'videos',
+        chunkIndex,
+        items
+      });
+    }
     return;
   }
   mkdirSync(INDEX_DIR, { recursive: true });
@@ -317,6 +379,11 @@ function isYouTubeQuotaError(error) {
 function isConvexSetupError(error) {
   const message = String(error.message || '').toLowerCase();
   return message.includes('could not find public function') || message.includes('did you forget to run `npx convex dev`');
+}
+
+function isConvexArgumentError(error) {
+  const message = String(error.message || '').toLowerCase();
+  return message.includes('invalid arguments provided') || message.includes('argumentvalidationerror');
 }
 
 function asNumber(value) {
@@ -891,6 +958,14 @@ app.use((error, req, res, _next) => {
     res.status(503).json({
       error:
         'Convex storage is connected, but the ChannelCue Convex functions are not deployed yet. Run npx convex dev --once locally, or npx convex deploy for Vercel, then try again.'
+    });
+    return;
+  }
+
+  if (isConvexArgumentError(error)) {
+    res.status(400).json({
+      error:
+        'ChannelCue could not save this data to Convex. The app has been updated to store large video indexes in smaller chunks; refresh and try the action again.'
     });
     return;
   }
