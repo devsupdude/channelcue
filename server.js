@@ -18,6 +18,8 @@ const YOUTUBE_SCOPE = 'https://www.googleapis.com/auth/youtube.readonly';
 const INDEX_UPLOADS_PER_CHANNEL = Number(process.env.INDEX_UPLOADS_PER_CHANNEL || 25);
 const INDEX_REFRESH_MINUTES = Number(process.env.INDEX_REFRESH_MINUTES || 60);
 const INDEX_REQUEST_DELAY_MS = Number(process.env.INDEX_REQUEST_DELAY_MS || 100);
+const INDEX_DESCRIPTION_LIMIT = Number(process.env.INDEX_DESCRIPTION_LIMIT || 600);
+const INDEX_CHANNEL_DESCRIPTION_LIMIT = Number(process.env.INDEX_CHANNEL_DESCRIPTION_LIMIT || 500);
 const DEFAULT_GOOGLE_TRIAL_DAYS = Number(process.env.DEFAULT_GOOGLE_TRIAL_DAYS || 7);
 const INDEX_REFRESH_MS = Math.max(INDEX_REFRESH_MINUTES, 5) * 60 * 1000;
 const PAYMENT_LINK_URL = process.env.PAYMENT_LINK_URL || '';
@@ -158,7 +160,7 @@ function toConvexValue(value) {
   return value;
 }
 
-function chunkForConvex(items = [], maxBytes = 200_000) {
+function chunkForConvex(items = [], maxBytes = 100_000) {
   const chunks = [];
   let current = [];
   let currentBytes = 2;
@@ -331,20 +333,30 @@ async function writeIndex(userId, index) {
     const channelChunks = chunkForConvex(channels);
     const videoChunks = chunkForConvex(videos);
     for (const [chunkIndex, items] of channelChunks.entries()) {
-      await convex.mutation(convexFns.setIndexChunk, {
-        userId,
-        kind: 'channels',
-        chunkIndex,
-        items
-      });
+      try {
+        await convex.mutation(convexFns.setIndexChunk, {
+          userId,
+          kind: 'channels',
+          chunkIndex,
+          items
+        });
+      } catch (error) {
+        error.message = `Convex channel index chunk ${chunkIndex + 1}/${channelChunks.length} failed with ${items.length} items: ${error.message}`;
+        throw error;
+      }
     }
     for (const [chunkIndex, items] of videoChunks.entries()) {
-      await convex.mutation(convexFns.setIndexChunk, {
-        userId,
-        kind: 'videos',
-        chunkIndex,
-        items
-      });
+      try {
+        await convex.mutation(convexFns.setIndexChunk, {
+          userId,
+          kind: 'videos',
+          chunkIndex,
+          items
+        });
+      } catch (error) {
+        error.message = `Convex video index chunk ${chunkIndex + 1}/${videoChunks.length} failed with ${items.length} items: ${error.message}`;
+        throw error;
+      }
     }
     return;
   }
@@ -462,6 +474,12 @@ function cleanText(value = '') {
     .trim();
 }
 
+function limitText(value = '', maxLength = 600) {
+  const text = cleanText(String(value || ''));
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 3)).trim()}...`;
+}
+
 function makeSummary(video) {
   const description = cleanText(video.description || '');
   if (description.length > 260) return `${description.slice(0, 257).trim()}...`;
@@ -502,6 +520,36 @@ function mapVideo(item, details = {}) {
       description: snippet.description,
       channelTitle: snippet.channelTitle
     })
+  };
+}
+
+function compactChannelForIndex(channel = {}) {
+  return {
+    id: String(channel.id || ''),
+    title: String(channel.title || 'Untitled channel'),
+    description: limitText(channel.description, INDEX_CHANNEL_DESCRIPTION_LIMIT),
+    thumbnail: channel.thumbnail || '',
+    url: channel.url || (channel.id ? `https://www.youtube.com/channel/${channel.id}` : '')
+  };
+}
+
+function compactVideoForIndex(video = {}) {
+  const description = limitText(video.description, INDEX_DESCRIPTION_LIMIT);
+  const summary = video.summary || makeSummary({ ...video, description });
+  return {
+    id: String(video.id || ''),
+    title: String(video.title || 'Untitled video'),
+    channelId: String(video.channelId || ''),
+    channelTitle: String(video.channelTitle || 'Channel'),
+    description,
+    searchText: limitText(`${video.title || ''} ${video.channelTitle || ''} ${description}`, 1000),
+    publishedAt: video.publishedAt || null,
+    thumbnail: video.thumbnail || '',
+    url: video.url || (video.id ? `https://www.youtube.com/watch?v=${video.id}` : ''),
+    viewCount: video.viewCount,
+    likeCount: video.likeCount,
+    duration: video.duration || '',
+    summary
   };
 }
 
@@ -645,13 +693,13 @@ async function refreshVideoIndex(userId, youtube, subscriptions, options = {}) {
     if (INDEX_REQUEST_DELAY_MS > 0) await delay(INDEX_REQUEST_DELAY_MS);
   }
 
-  const videos = [...videosById.values()].sort(
+  const videos = [...videosById.values()].map(compactVideoForIndex).sort(
     (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
   );
   const index = {
     refreshedAt: new Date().toISOString(),
     uploadsPerChannel: maxResults,
-    channels: subscriptions,
+    channels: subscriptions.map(compactChannelForIndex),
     videos,
     errors
   };
@@ -706,8 +754,8 @@ function searchIndex(index, query) {
     .map(video => {
       const title = (video.title || '').toLowerCase();
       const channel = (video.channelTitle || '').toLowerCase();
-      const description = (video.description || '').toLowerCase();
-      const haystack = `${title} ${channel} ${description}`;
+      const searchText = (video.searchText || video.description || '').toLowerCase();
+      const haystack = `${title} ${channel} ${searchText}`;
       const matchedTerms = terms.filter(term => haystack.includes(term));
       if (!matchedTerms.length) return null;
 
