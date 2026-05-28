@@ -148,8 +148,11 @@ function toConvexValue(value) {
   if (typeof value === 'number' && !Number.isFinite(value)) return null;
   if (Array.isArray(value)) return value.map(item => toConvexValue(item));
   if (value && typeof value === 'object') {
+    if (value instanceof Date) return value.toISOString();
     return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, toConvexValue(item)])
+      Object.entries(value)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => [key, toConvexValue(item)])
     );
   }
   return value;
