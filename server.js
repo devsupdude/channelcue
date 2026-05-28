@@ -524,12 +524,21 @@ function mapVideo(item, details = {}) {
   };
 }
 
-function compactChannelForIndex(channel = {}) {
+function compactChannelForIndex(channel = {}, details = {}) {
+  const snippet = details.snippet || {};
+  const statistics = details.statistics || {};
   return {
     id: String(channel.id || ''),
-    title: String(channel.title || 'Untitled channel'),
-    description: limitText(channel.description, INDEX_CHANNEL_DESCRIPTION_LIMIT),
-    thumbnail: channel.thumbnail || '',
+    title: String(snippet.title || channel.title || 'Untitled channel'),
+    description: limitText(snippet.description || channel.description, INDEX_CHANNEL_DESCRIPTION_LIMIT),
+    thumbnail:
+      snippet.thumbnails?.medium?.url ||
+      snippet.thumbnails?.default?.url ||
+      channel.thumbnail ||
+      '',
+    subscriberCount: asNumber(statistics.subscriberCount),
+    videoCount: asNumber(statistics.videoCount),
+    viewCount: asNumber(statistics.viewCount),
     url: channel.url || (channel.id ? `https://www.youtube.com/channel/${channel.id}` : '')
   };
 }
@@ -642,21 +651,25 @@ function chunk(items, size) {
   return chunks;
 }
 
-async function getUploadPlaylists(youtube, channels) {
-  const playlists = new Map();
+async function getChannelIndexDetails(youtube, channels) {
+  const channelDetails = new Map();
   for (const channelChunk of chunk(channels, 50)) {
     const response = await youtube.channels.list({
-      part: ['contentDetails'],
+      part: ['snippet', 'statistics', 'contentDetails'],
       id: channelChunk.map(channel => channel.id),
       maxResults: 50
     });
 
     for (const item of response.data.items || []) {
       const playlistId = item.contentDetails?.relatedPlaylists?.uploads;
-      if (playlistId) playlists.set(item.id, playlistId);
+      channelDetails.set(item.id, {
+        uploadsPlaylistId: playlistId,
+        snippet: item.snippet || {},
+        statistics: item.statistics || {}
+      });
     }
   }
-  return playlists;
+  return channelDetails;
 }
 
 async function refreshVideoIndex(userId, youtube, subscriptions, options = {}) {
@@ -664,12 +677,12 @@ async function refreshVideoIndex(userId, youtube, subscriptions, options = {}) {
     Number(options.maxResults || INDEX_UPLOADS_PER_CHANNEL),
     50
   );
-  const uploadPlaylists = await getUploadPlaylists(youtube, subscriptions);
+  const channelDetails = await getChannelIndexDetails(youtube, subscriptions);
   const videosById = new Map();
   const errors = [];
 
   for (const channel of subscriptions) {
-    const playlistId = uploadPlaylists.get(channel.id);
+    const playlistId = channelDetails.get(channel.id)?.uploadsPlaylistId;
     if (!playlistId) continue;
 
     try {
@@ -700,7 +713,7 @@ async function refreshVideoIndex(userId, youtube, subscriptions, options = {}) {
   const index = {
     refreshedAt: new Date().toISOString(),
     uploadsPerChannel: maxResults,
-    channels: subscriptions.map(compactChannelForIndex),
+    channels: subscriptions.map(channel => compactChannelForIndex(channel, channelDetails.get(channel.id))),
     videos,
     errors
   };
