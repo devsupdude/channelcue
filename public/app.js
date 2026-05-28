@@ -3,8 +3,12 @@ const state = {
   subscriptions: [],
   clerkConfigured: false,
   signedIn: false,
-  googleConfigured: false
+  googleConfigured: false,
+  useSharedGoogleKey: false
 };
+
+const SHARED_CLIENT_ID_MASK = '******** shared Google client ID ********';
+const SHARED_CLIENT_SECRET_MASK = '******** shared Google client secret ********';
 
 const els = {
   notice: document.querySelector('#notice'),
@@ -140,6 +144,11 @@ function escapeHtml(value = '') {
 
 function updateAuthUi(configured) {
   state.googleConfigured = configured;
+  if (!state.signedIn) {
+    els.setupPanel.classList.add('hidden');
+    setSharedGoogleKeySelection(false);
+  }
+  els.configButton.classList.toggle('hidden', !state.signedIn);
   els.connectButton.classList.toggle('hidden', state.connected || !state.signedIn);
   els.logoutButton.classList.toggle('hidden', !state.connected);
   els.subBriefLogoutButton.classList.toggle('hidden', !state.signedIn);
@@ -183,7 +192,35 @@ function activateConfigTab(tabName) {
   els.billingPane.classList.toggle('hidden', showGoogle);
 }
 
+function setSharedGoogleKeySelection(isSelected) {
+  state.useSharedGoogleKey = isSelected;
+  els.clientIdInput.readOnly = isSelected;
+  els.clientSecretInput.readOnly = isSelected;
+  els.clientIdInput.dataset.sharedKey = isSelected ? 'true' : 'false';
+  els.clientSecretInput.dataset.sharedKey = isSelected ? 'true' : 'false';
+
+  if (isSelected) {
+    els.clientIdInput.value = SHARED_CLIENT_ID_MASK;
+    els.clientSecretInput.value = SHARED_CLIENT_SECRET_MASK;
+    els.clientSecretInput.placeholder = '';
+    return;
+  }
+
+  if (els.clientIdInput.value === SHARED_CLIENT_ID_MASK) {
+    els.clientIdInput.value = '';
+  }
+  if (els.clientSecretInput.value === SHARED_CLIENT_SECRET_MASK) {
+    els.clientSecretInput.value = '';
+  }
+}
+
 function showConfiguration(tabName = 'billing') {
+  if (!state.signedIn) {
+    showNotice('Sign in to ChannelCue before opening Configuration.');
+    if (state.clerkConfigured) els.authButton.click();
+    return;
+  }
+
   els.setupPanel.classList.remove('hidden');
   activateConfigTab(tabName);
   loadGoogleConfig();
@@ -191,6 +228,7 @@ function showConfiguration(tabName = 'billing') {
 
 function renderHeroState(config = {}) {
   els.hero.classList.toggle('hidden', state.signedIn);
+  els.heroConfigButton.classList.toggle('hidden', !state.signedIn);
   renderAccountBanner(config);
   const trial = config.defaultGoogleTrial;
   const expired = Boolean(trial?.expired && !config.personalConfigured);
@@ -275,9 +313,16 @@ function renderTrial(config) {
     return;
   }
 
-  els.trialStatus.textContent = `Use the shared Google key free for ${trial.daysRemaining || 7} days. The Google client ID and secret stay private on the server. After that, add your own credentials or continue for $${config.annualPriceUsd || 36}/year.`;
-  els.useDefaultKeyButton.textContent = 'Use My Key';
-  els.useDefaultKeyButton.disabled = false;
+  if (state.useSharedGoogleKey) {
+    els.trialStatus.textContent =
+      'Shared Google key selected. The client ID and secret are masked here and stay private on the server. Click Save configuration to start your 7-day trial.';
+    els.useDefaultKeyButton.textContent = 'Shared key selected';
+    els.useDefaultKeyButton.disabled = true;
+  } else {
+    els.trialStatus.textContent = `Use the shared Google key free for ${trial.daysRemaining || 7} days. The Google client ID and secret stay private on the server. Click Use My Key for 7 Days, then save to start the trial.`;
+    els.useDefaultKeyButton.textContent = 'Use My Key for 7 Days';
+    els.useDefaultKeyButton.disabled = false;
+  }
   renderHeroState(config);
 }
 
@@ -359,10 +404,17 @@ function renderVideos(target, videos) {
 }
 
 async function loadGoogleConfig() {
+  if (!state.signedIn) return;
+
   try {
     const config = await api('/api/config/google');
-    els.clientIdInput.value = config.clientId || '';
-    els.clientSecretInput.placeholder = config.hasClientSecret
+    const usingSharedKey = Boolean(config.usingDefaultGoogleConfig && config.defaultGoogleTrial?.active);
+    setSharedGoogleKeySelection(usingSharedKey);
+    if (!usingSharedKey) {
+      els.clientIdInput.value = config.clientId || '';
+      els.clientSecretInput.value = '';
+    }
+    els.clientSecretInput.placeholder = !usingSharedKey && config.hasClientSecret
       ? 'Saved. Enter a new secret to replace it.'
       : '';
     if (config.redirectUri) els.redirectUri.textContent = config.redirectUri;
@@ -545,12 +597,13 @@ els.connectButton.addEventListener('click', async () => {
   try {
     const status = await api('/api/auth/status');
     state.signedIn = status.signedIn;
+    updateAuthUi(status.configured);
     if (status.configured) {
       showNotice('Opening Google so you can connect YouTube. When you return, ChannelCue will load your channels.');
       window.location.href = '/auth/youtube';
       return;
     }
-    els.setupPanel.classList.remove('hidden');
+    showConfiguration('google');
     els.clientIdInput.focus();
   } catch (error) {
     handleAppError(error);
@@ -601,38 +654,40 @@ els.authButton.addEventListener('click', async () => {
 });
 
 els.useDefaultKeyButton.addEventListener('click', async () => {
-  try {
-    els.useDefaultKeyButton.disabled = true;
-    const data = await api('/api/config/google/use-default', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({})
-    });
-    renderTrial(data);
-    updateAuthUi(true);
-    showNotice('Shared Google key trial started. You can connect YouTube now.');
-  } catch (error) {
-    handleAppError(error);
-  } finally {
-    await loadGoogleConfig();
-  }
+  setSharedGoogleKeySelection(true);
+  els.trialStatus.textContent =
+    'Shared Google key selected. The client ID and secret are masked here and stay private on the server. Click Save configuration to start your 7-day trial.';
+  els.useDefaultKeyButton.textContent = 'Shared key selected';
+  els.useDefaultKeyButton.disabled = true;
+  showNotice('Shared Google key selected. Click Save configuration to start your 7-day trial.');
 });
 
 els.setupForm.addEventListener('submit', async event => {
   event.preventDefault();
   try {
     els.setupForm.querySelector('button[type="submit"]').disabled = true;
-    const data = await api('/api/config/google', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        clientId: els.clientIdInput.value,
-        clientSecret: els.clientSecretInput.value
-      })
-    });
+    const data = state.useSharedGoogleKey
+      ? await api('/api/config/google/use-default', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        })
+      : await api('/api/config/google', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clientId: els.clientIdInput.value,
+            clientSecret: els.clientSecretInput.value
+          })
+        });
     if (data.redirectUri) els.redirectUri.textContent = data.redirectUri;
     updateAuthUi(true);
-    showNotice('Configuration saved. You can update these Google keys any time from Configuration.');
+    showNotice(
+      state.useSharedGoogleKey
+        ? 'Shared Google key trial started. You can connect YouTube now.'
+        : 'Configuration saved. You can update these Google keys any time from Configuration.'
+    );
+    await loadGoogleConfig();
   } catch (error) {
     handleAppError(error);
   } finally {
