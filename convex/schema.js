@@ -8,6 +8,12 @@ export default defineSchema({
     value: v.string(),
     updatedAt: v.string()
   }).index("by_user_key", ["userId", "key"]),
+  userAccess: defineTable({
+    userId: v.string(),
+    trialStartedAt: v.optional(v.string()),
+    subscriptionActive: v.boolean(),
+    updatedAt: v.string()
+  }).index("by_user", ["userId"]),
   appSessions: defineTable({
     sid: v.string(),
     data: v.any(),

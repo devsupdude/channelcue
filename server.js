@@ -36,6 +36,9 @@ const convex = CONVEX_URL ? new ConvexHttpClient(CONVEX_URL) : null;
 const convexFns = {
   getConfigValue: convexApi.appData.getConfigValue,
   setConfigValues: convexApi.appData.setConfigValues,
+  getUserAccess: convexApi.appData.getUserAccess,
+  startUserTrial: convexApi.appData.startUserTrial,
+  setSubscriptionActive: convexApi.appData.setSubscriptionActive,
   getSession: convexApi.appData.getSession,
   setSession: convexApi.appData.setSession,
   destroySession: convexApi.appData.destroySession,
@@ -206,6 +209,34 @@ async function setConfigValues(userId, values) {
   writeConfigStore(store);
 }
 
+async function getUserAccess(userId) {
+  if (convex) {
+    return convex.query(convexFns.getUserAccess, { userId });
+  }
+
+  return {
+    trialStartedAt: (await getConfigValue(userId, 'TRIAL_STARTED_AT')) || null,
+    subscriptionActive: (await getConfigValue(userId, 'SUBSCRIPTION_ACTIVE')) === 'true'
+  };
+}
+
+async function startUserTrial(userId, trialStartedAt = new Date().toISOString()) {
+  if (convex) {
+    await convex.mutation(convexFns.startUserTrial, { userId, trialStartedAt });
+    return;
+  }
+
+  const existingStartedAt = await getConfigValue(userId, 'TRIAL_STARTED_AT');
+  if (!existingStartedAt) {
+    await setConfigValues(userId, { TRIAL_STARTED_AT: trialStartedAt });
+  }
+}
+
+async function hasSubscriptionActive(userId) {
+  const access = await getUserAccess(userId);
+  return Boolean(access.subscriptionActive);
+}
+
 function getDefaultGoogleConfig() {
   return {
     clientId: process.env.DEFAULT_GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '',
@@ -214,7 +245,10 @@ function getDefaultGoogleConfig() {
 }
 
 async function getTrialInfo(userId) {
-  const startedAt = await getConfigValue(userId, 'DEFAULT_GOOGLE_TRIAL_STARTED_AT');
+  const access = await getUserAccess(userId);
+  const startedAt =
+    access.trialStartedAt ||
+    (await getConfigValue(userId, 'DEFAULT_GOOGLE_TRIAL_STARTED_AT'));
   const defaultConfig = getDefaultGoogleConfig();
   const available = Boolean(defaultConfig.clientId && defaultConfig.clientSecret);
 
@@ -242,7 +276,8 @@ async function getTrialInfo(userId) {
     expired: available && !active,
     startedAt,
     expiresAt: expires.toISOString(),
-    daysRemaining
+    daysRemaining,
+    subscriptionActive: Boolean(access.subscriptionActive)
   };
 }
 
@@ -869,6 +904,7 @@ app.get('/api/auth/status', async (req, res, next) => {
   try {
     const userId = getUserId(req);
     const trial = userId ? await getTrialInfo(userId) : null;
+    const access = userId ? await getUserAccess(userId) : null;
     const googleConfig = userId ? await getGoogleConfig(userId) : { source: 'none' };
     res.json({
       connected: Boolean(req.session.tokens),
@@ -882,6 +918,7 @@ app.get('/api/auth/status', async (req, res, next) => {
       personalConfigured: userId ? await hasPersonalGoogleConfig(userId) : false,
       usingDefaultGoogleConfig: googleConfig.source === 'trial',
       defaultGoogleTrial: trial,
+      access,
       annualPriceUsd: 36,
       paymentLinkUrl: PAYMENT_LINK_URL
     });
@@ -897,6 +934,7 @@ app.get('/api/config/google', async (req, res, next) => {
 
     const config = await getGoogleConfig(userId);
     const trial = await getTrialInfo(userId);
+    const access = await getUserAccess(userId);
     res.json({
       configured: Boolean(config.clientId && config.clientSecret),
       personalConfigured: await hasPersonalGoogleConfig(userId),
@@ -905,6 +943,7 @@ app.get('/api/config/google', async (req, res, next) => {
       clientId: (await getConfigValue(userId, 'GOOGLE_CLIENT_ID')) || '',
       hasClientSecret: Boolean(await getConfigValue(userId, 'GOOGLE_CLIENT_SECRET')),
       defaultGoogleTrial: trial,
+      access,
       annualPriceUsd: 36,
       paymentLinkUrl: PAYMENT_LINK_URL,
       redirectUri: getRedirectUrl(req)
@@ -926,22 +965,22 @@ app.post('/api/config/google/use-default', async (req, res, next) => {
     }
     if (trial.expired) {
       res.status(403).json({
-        error: 'Your 7-day trial has ended. Add your own Google client ID and secret in Configuration to keep using the app.'
+        error: 'Your 7-day trial has ended. Activate your ChannelCue subscription, then add your own Google client ID and secret in Configuration to keep using the app.'
       });
       return;
     }
     if (!trial.startedAt) {
-      await setConfigValues(userId, {
-        DEFAULT_GOOGLE_TRIAL_STARTED_AT: new Date().toISOString()
-      });
+      await startUserTrial(userId);
     }
 
     const nextTrial = await getTrialInfo(userId);
+    const access = await getUserAccess(userId);
     res.json({
       ok: true,
       configured: true,
       usingDefaultGoogleConfig: true,
       defaultGoogleTrial: nextTrial,
+      access,
       annualPriceUsd: 36,
       redirectUri: getRedirectUrl(req)
     });
@@ -961,6 +1000,16 @@ app.post('/api/config/google', async (req, res, next) => {
     const existing = await getGoogleConfig(userId);
     if (!clientId || (!clientSecret && !existing.clientSecret)) {
       res.status(400).json({ error: 'Client ID and client secret are required. If you changed the client ID, paste the matching secret too.' });
+      return;
+    }
+
+    if (!(await hasSubscriptionActive(userId))) {
+      res.status(402).json({
+        error:
+          'Personal Google credentials are available with an active ChannelCue subscription. Start or renew your $36/year plan, then save your Google client ID and secret again.',
+        code: 'CHANNELCUE_SUBSCRIPTION_REQUIRED',
+        paymentLinkUrl: PAYMENT_LINK_URL
+      });
       return;
     }
 

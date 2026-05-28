@@ -43,6 +43,85 @@ export const setConfigValues = mutation({
   }
 });
 
+export const getUserAccess = query({
+  args: {
+    userId: v.string()
+  },
+  handler: async (ctx, args) => {
+    const doc = await ctx.db
+      .query("userAccess")
+      .withIndex("by_user", q => q.eq("userId", args.userId))
+      .unique();
+
+    return doc
+      ? {
+          trialStartedAt: doc.trialStartedAt ?? null,
+          subscriptionActive: doc.subscriptionActive
+        }
+      : {
+          trialStartedAt: null,
+          subscriptionActive: false
+        };
+  }
+});
+
+export const startUserTrial = mutation({
+  args: {
+    userId: v.string(),
+    trialStartedAt: v.string()
+  },
+  handler: async (ctx, args) => {
+    const updatedAt = new Date().toISOString();
+    const existing = await ctx.db
+      .query("userAccess")
+      .withIndex("by_user", q => q.eq("userId", args.userId))
+      .unique();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        trialStartedAt: existing.trialStartedAt || args.trialStartedAt,
+        updatedAt
+      });
+    } else {
+      await ctx.db.insert("userAccess", {
+        userId: args.userId,
+        trialStartedAt: args.trialStartedAt,
+        subscriptionActive: false,
+        updatedAt
+      });
+    }
+    return null;
+  }
+});
+
+export const setSubscriptionActive = mutation({
+  args: {
+    userId: v.string(),
+    subscriptionActive: v.boolean()
+  },
+  handler: async (ctx, args) => {
+    const updatedAt = new Date().toISOString();
+    const existing = await ctx.db
+      .query("userAccess")
+      .withIndex("by_user", q => q.eq("userId", args.userId))
+      .unique();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        subscriptionActive: args.subscriptionActive,
+        updatedAt
+      });
+    } else {
+      await ctx.db.insert("userAccess", {
+        userId: args.userId,
+        subscriptionActive: args.subscriptionActive,
+        updatedAt
+      });
+    }
+    return null;
+  }
+});
+
 export const getSession = query({
   args: {
     sid: v.string()

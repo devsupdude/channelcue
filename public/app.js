@@ -91,9 +91,9 @@ async function api(path, options = {}) {
   return data;
 }
 
-function showUpgradeCta(message, paymentLinkUrl = '') {
+function showUpgradeCta(message, paymentLinkUrl = '', title = 'YouTube API quota reached') {
   els.accountBanner.classList.remove('hidden');
-  els.accountBannerTitle.textContent = 'YouTube API quota reached';
+  els.accountBannerTitle.textContent = title;
   els.accountBannerMessage.textContent = message;
   els.accountConnectButton.classList.add('hidden');
   els.accountIndexButton.classList.add('hidden');
@@ -113,9 +113,16 @@ function showUpgradeCta(message, paymentLinkUrl = '') {
 function handleAppError(error) {
   if (
     error.payload?.code === 'YOUTUBE_API_QUOTA_EXCEEDED' ||
-    error.payload?.code === 'TRIAL_TOKENS_EXHAUSTED'
+    error.payload?.code === 'TRIAL_TOKENS_EXHAUSTED' ||
+    error.payload?.code === 'CHANNELCUE_SUBSCRIPTION_REQUIRED'
   ) {
-    showUpgradeCta(error.message, error.payload.paymentLinkUrl);
+    showUpgradeCta(
+      error.message,
+      error.payload.paymentLinkUrl,
+      error.payload?.code === 'CHANNELCUE_SUBSCRIPTION_REQUIRED'
+        ? 'ChannelCue subscription required'
+        : 'YouTube API quota reached'
+    );
   }
   showNotice(error.message);
 }
@@ -327,7 +334,7 @@ function renderTrial(config) {
   }
 
   if (trial.expired) {
-    els.trialStatus.textContent = `Your 7-day trial ended. Add your own Google credentials to continue. Continued access is $${config.annualPriceUsd || 36}/year.`;
+    els.trialStatus.textContent = `Your 7-day trial ended. Activate your ChannelCue subscription, then add your own Google credentials to continue. Continued access is $${config.annualPriceUsd || 36}/year.`;
     els.useDefaultKeyButton.textContent = 'Trial ended';
     els.useDefaultKeyButton.disabled = true;
     renderHeroState(config);
