@@ -320,13 +320,14 @@ async function readIndex(userId) {
 async function writeIndex(userId, index) {
   if (convex) {
     const cleanIndex = toConvexValue(index);
-    const { channels = [], videos = [], ...meta } = cleanIndex;
+    const { channels = [], videos = [], errors = [], ...meta } = cleanIndex;
     await convex.mutation(convexFns.replaceIndexStart, {
       userId,
       meta: {
         ...meta,
         channelCount: channels.length,
-        videoCount: videos.length
+        videoCount: videos.length,
+        errorCount: errors.length
       }
     });
 
@@ -998,8 +999,9 @@ app.get('/api/index/library', async (req, res, next) => {
 });
 
 app.post('/api/index/refresh', async (req, res, next) => {
+  let userId;
   try {
-    const userId = requireAppUser(req, res);
+    userId = requireAppUser(req, res);
     if (!userId) return;
     const youtube = await requireYouTube(req, res);
     if (!youtube) return;
@@ -1017,6 +1019,20 @@ app.post('/api/index/refresh', async (req, res, next) => {
       errors: index.errors
     });
   } catch (error) {
+    if (userId && isConvexArgumentError(error)) {
+      console.error('Index refresh storage warning:', error.message);
+      const savedIndex = await readIndex(userId);
+      if (savedIndex.videos?.length || savedIndex.channels?.length) {
+        res.json({
+          refreshedAt: savedIndex.refreshedAt,
+          channelCount: savedIndex.channels?.length || 0,
+          videoCount: savedIndex.videos?.length || 0,
+          warning:
+            'ChannelCue saved a usable index, but Convex reported a storage warning. You can keep searching the saved index.'
+        });
+        return;
+      }
+    }
     next(error);
   }
 });

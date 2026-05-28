@@ -502,7 +502,10 @@ async function refreshIndex() {
     });
     renderIndexStatus(status);
     await loadCachedIndex();
-    showNotice(`Search index refreshed with ${status.videoCount} videos from ${status.channelCount} channels.`);
+    showNotice(
+      status.warning ||
+        `Search index refreshed with ${status.videoCount} videos from ${status.channelCount} channels.`
+    );
   } catch (error) {
     handleAppError(error);
   } finally {
