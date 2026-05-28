@@ -13,6 +13,7 @@
           <a class="brand" href="#top">ChannelCue</a>
           <div class="actions">
             <button id="authButton" class="secondary" type="button">Get Started</button>
+            <button id="faqButton" class="secondary hidden" type="button">Frequently Asked Questions</button>
             <button id="configButton" class="secondary hidden" type="button">Configuration</button>
             <button id="connectButton" class="primary hidden" type="button">Connect YouTube</button>
             <button id="logoutButton" class="secondary hidden" type="button">Disconnect</button>
@@ -115,6 +116,51 @@
               <button class="primary" type="submit">Save configuration</button>
             </div>
           </form>
+        </section>
+
+        <section id="faqPanel" class="faq-panel hidden">
+          <div>
+            <h2>Frequently Asked Questions</h2>
+            <p class="close-hint">Click Frequently Asked Questions again to close this window.</p>
+          </div>
+          <div class="faq-grid">
+            <article>
+              <h3>How does ChannelCue use the YouTube API?</h3>
+              <p>
+                ChannelCue asks YouTube for your subscribed channels, then builds a saved index of recent uploads. After an index is saved, channel browsing and search use the saved Convex index first instead of calling YouTube again.
+              </p>
+            </article>
+            <article>
+              <h3>When does ChannelCue call YouTube?</h3>
+              <p>
+                YouTube is used when you connect your account, when there is no saved index yet, and when you click Refresh index. Logging back in and selecting channels should use the saved index when one exists.
+              </p>
+            </article>
+            <article>
+              <h3>What happens if YouTube quota runs out?</h3>
+              <p>
+                Google controls the daily YouTube API quota for the connected credentials. If quota runs out during a refresh, ChannelCue keeps your previous completed index available. You can search that saved index and refresh again after Google resets the quota.
+              </p>
+            </article>
+            <article>
+              <h3>Why do I need my own Google credentials?</h3>
+              <p>
+                Your own Google OAuth client keeps your YouTube API usage tied to your Google Cloud project instead of a shared trial project. That makes quota clearer and gives you control over your own access.
+              </p>
+            </article>
+            <article>
+              <h3>Does Google charge for this setup?</h3>
+              <p>
+                Creating a Google Cloud project, enabling YouTube Data API v3, and creating an OAuth client are free. Google provides a daily quota. If you need more quota, Google may require a quota request or review.
+              </p>
+            </article>
+            <article>
+              <h3>How do I set up Google credentials?</h3>
+              <p>
+                Open Configuration, choose Google setup, create a Google Cloud project, enable YouTube Data API v3, create an OAuth web client, add the shown origin and redirect URI, then paste the client ID and secret into ChannelCue.
+              </p>
+            </article>
+          </div>
         </section>
 
         <section class="controls">

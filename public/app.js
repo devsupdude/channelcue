@@ -15,6 +15,7 @@ const SHARED_CLIENT_SECRET_MASK = '******** ChannelCue trial client secret *****
 const els = {
   notice: document.querySelector('#notice'),
   authButton: document.querySelector('#authButton'),
+  faqButton: document.querySelector('#faqButton'),
   configButton: document.querySelector('#configButton'),
   connectButton: document.querySelector('#connectButton'),
   logoutButton: document.querySelector('#logoutButton'),
@@ -31,6 +32,7 @@ const els = {
   heroMessage: document.querySelector('#heroMessage'),
   hero: document.querySelector('#top'),
   heroVideo: document.querySelector('#heroVideo'),
+  faqPanel: document.querySelector('#faqPanel'),
   setupPanel: document.querySelector('#setupPanel'),
   setupForm: document.querySelector('#setupForm'),
   clerkStatus: document.querySelector('#clerkStatus'),
@@ -151,8 +153,10 @@ function updateAuthUi(configured) {
   state.googleConfigured = configured;
   if (!state.signedIn) {
     els.setupPanel.classList.add('hidden');
+    els.faqPanel.classList.add('hidden');
     setSharedGoogleKeySelection(false);
   }
+  els.faqButton.classList.toggle('hidden', !state.signedIn);
   els.configButton.classList.toggle('hidden', !state.signedIn);
   els.connectButton.classList.toggle('hidden', state.connected || !state.signedIn);
   els.logoutButton.classList.toggle('hidden', !state.connected);
@@ -226,9 +230,21 @@ function showConfiguration(tabName = 'billing') {
     return;
   }
 
+  els.faqPanel.classList.add('hidden');
   els.setupPanel.classList.remove('hidden');
   activateConfigTab(tabName);
   loadGoogleConfig();
+}
+
+function showFaq() {
+  if (!state.signedIn) {
+    showNotice('Sign in to ChannelCue before opening Frequently Asked Questions.');
+    if (state.clerkConfigured) els.authButton.click();
+    return;
+  }
+
+  els.setupPanel.classList.add('hidden');
+  els.faqPanel.classList.remove('hidden');
 }
 
 function renderHeroState(config = {}) {
@@ -674,6 +690,14 @@ els.configButton.addEventListener('click', () => {
     return;
   }
   showConfiguration('google');
+});
+
+els.faqButton.addEventListener('click', () => {
+  if (!els.faqPanel.classList.contains('hidden')) {
+    els.faqPanel.classList.add('hidden');
+    return;
+  }
+  showFaq();
 });
 
 els.heroConfigButton.addEventListener('click', () => {
