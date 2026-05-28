@@ -12,6 +12,8 @@ export default defineSchema({
     userId: v.string(),
     trialStartedAt: v.optional(v.string()),
     subscriptionActive: v.boolean(),
+    subscriptionEndsAt: v.optional(v.string()),
+    accessOverride: v.optional(v.string()),
     updatedAt: v.string()
   }).index("by_user", ["userId"]),
   appSessions: defineTable({

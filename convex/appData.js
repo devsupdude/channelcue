@@ -56,11 +56,15 @@ export const getUserAccess = query({
     return doc
       ? {
           trialStartedAt: doc.trialStartedAt ?? null,
-          subscriptionActive: doc.subscriptionActive
+          subscriptionActive: doc.subscriptionActive,
+          subscriptionEndsAt: doc.subscriptionEndsAt ?? null,
+          accessOverride: doc.accessOverride ?? "none"
         }
       : {
           trialStartedAt: null,
-          subscriptionActive: false
+          subscriptionActive: false,
+          subscriptionEndsAt: null,
+          accessOverride: "none"
         };
   }
 });
@@ -97,7 +101,9 @@ export const startUserTrial = mutation({
 export const setSubscriptionActive = mutation({
   args: {
     userId: v.string(),
-    subscriptionActive: v.boolean()
+    subscriptionActive: v.boolean(),
+    subscriptionEndsAt: v.optional(v.union(v.string(), v.null())),
+    accessOverride: v.optional(v.string())
   },
   handler: async (ctx, args) => {
     const updatedAt = new Date().toISOString();
@@ -107,16 +113,22 @@ export const setSubscriptionActive = mutation({
       .unique();
 
     if (existing) {
-      await ctx.db.patch(existing._id, {
+      const patch = {
         subscriptionActive: args.subscriptionActive,
         updatedAt
-      });
+      };
+      if (args.subscriptionEndsAt !== undefined) patch.subscriptionEndsAt = args.subscriptionEndsAt || undefined;
+      if (args.accessOverride !== undefined) patch.accessOverride = args.accessOverride;
+      await ctx.db.patch(existing._id, patch);
     } else {
-      await ctx.db.insert("userAccess", {
+      const doc = {
         userId: args.userId,
         subscriptionActive: args.subscriptionActive,
         updatedAt
-      });
+      };
+      if (args.subscriptionEndsAt) doc.subscriptionEndsAt = args.subscriptionEndsAt;
+      if (args.accessOverride) doc.accessOverride = args.accessOverride;
+      await ctx.db.insert("userAccess", doc);
     }
     return null;
   }

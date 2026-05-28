@@ -216,7 +216,9 @@ async function getUserAccess(userId) {
 
   return {
     trialStartedAt: (await getConfigValue(userId, 'TRIAL_STARTED_AT')) || null,
-    subscriptionActive: (await getConfigValue(userId, 'SUBSCRIPTION_ACTIVE')) === 'true'
+    subscriptionActive: (await getConfigValue(userId, 'SUBSCRIPTION_ACTIVE')) === 'true',
+    subscriptionEndsAt: (await getConfigValue(userId, 'SUBSCRIPTION_ENDS_AT')) || null,
+    accessOverride: (await getConfigValue(userId, 'ACCESS_OVERRIDE')) || 'none'
   };
 }
 
@@ -234,7 +236,11 @@ async function startUserTrial(userId, trialStartedAt = new Date().toISOString())
 
 async function hasSubscriptionActive(userId) {
   const access = await getUserAccess(userId);
-  return Boolean(access.subscriptionActive);
+  if (access.accessOverride === 'comped') return true;
+  if (!access.subscriptionActive) return false;
+  if (!access.subscriptionEndsAt) return true;
+  const endsAt = new Date(access.subscriptionEndsAt).getTime();
+  return Number.isFinite(endsAt) && Date.now() < endsAt;
 }
 
 function getDefaultGoogleConfig() {
