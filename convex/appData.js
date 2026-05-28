@@ -113,14 +113,20 @@ export const getIndex = query({
       .unique();
 
     if (metaDoc) {
-      const chunks = await ctx.db
-        .query("videoIndexChunks")
-        .withIndex("by_user", q => q.eq("userId", args.userId))
-        .collect();
+      const activeBatchId = metaDoc.meta?.batchId;
+      const chunks = activeBatchId
+        ? await ctx.db
+            .query("videoIndexChunks")
+            .withIndex("by_user_batch", q => q.eq("userId", args.userId).eq("batchId", activeBatchId))
+            .collect()
+        : await ctx.db
+            .query("videoIndexChunks")
+            .withIndex("by_user", q => q.eq("userId", args.userId))
+            .collect();
 
       const byKind = kind =>
         chunks
-          .filter(chunk => chunk.kind === kind)
+          .filter(chunk => chunk.kind === kind && (!activeBatchId || chunk.batchId === activeBatchId))
           .sort((a, b) => a.chunkIndex - b.chunkIndex)
           .flatMap(chunk => chunk.items || []);
 
@@ -176,18 +182,30 @@ export const replaceIndexStart = mutation({
 export const setIndexChunk = mutation({
   args: {
     userId: v.string(),
+    batchId: v.optional(v.string()),
     kind: v.string(),
     chunkIndex: v.number(),
     items: v.any()
   },
   handler: async (ctx, args) => {
     const updatedAt = new Date().toISOString();
-    const existing = await ctx.db
-      .query("videoIndexChunks")
-      .withIndex("by_user_kind_chunk", q =>
-        q.eq("userId", args.userId).eq("kind", args.kind).eq("chunkIndex", args.chunkIndex)
-      )
-      .unique();
+    const existing = args.batchId
+      ? await ctx.db
+          .query("videoIndexChunks")
+          .withIndex("by_user_batch_kind_chunk", q =>
+            q
+              .eq("userId", args.userId)
+              .eq("batchId", args.batchId)
+              .eq("kind", args.kind)
+              .eq("chunkIndex", args.chunkIndex)
+          )
+          .unique()
+      : await ctx.db
+          .query("videoIndexChunks")
+          .withIndex("by_user_kind_chunk", q =>
+            q.eq("userId", args.userId).eq("kind", args.kind).eq("chunkIndex", args.chunkIndex)
+          )
+          .unique();
 
     const doc = {
       userId: args.userId,
@@ -196,11 +214,54 @@ export const setIndexChunk = mutation({
       items: args.items,
       updatedAt
     };
+    if (args.batchId) doc.batchId = args.batchId;
 
     if (existing) {
       await ctx.db.patch(existing._id, doc);
     } else {
       await ctx.db.insert("videoIndexChunks", doc);
+    }
+    return null;
+  }
+});
+
+export const commitIndex = mutation({
+  args: {
+    userId: v.string(),
+    batchId: v.string(),
+    meta: v.any()
+  },
+  handler: async (ctx, args) => {
+    const updatedAt = new Date().toISOString();
+    const existing = await ctx.db
+      .query("videoIndexMetas")
+      .withIndex("by_user", q => q.eq("userId", args.userId))
+      .unique();
+
+    const nextMeta = {
+      ...args.meta,
+      batchId: args.batchId,
+      status: "complete"
+    };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, { meta: nextMeta, updatedAt });
+    } else {
+      await ctx.db.insert("videoIndexMetas", {
+        userId: args.userId,
+        meta: nextMeta,
+        updatedAt
+      });
+    }
+
+    const staleChunks = await ctx.db
+      .query("videoIndexChunks")
+      .withIndex("by_user", q => q.eq("userId", args.userId))
+      .collect();
+    for (const chunk of staleChunks) {
+      if (chunk.batchId && chunk.batchId !== args.batchId) {
+        await ctx.db.delete(chunk._id);
+      }
     }
     return null;
   }

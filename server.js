@@ -42,7 +42,8 @@ const convexFns = {
   getIndex: convexApi.appData.getIndex,
   setIndex: convexApi.appData.setIndex,
   replaceIndexStart: convexApi.appData.replaceIndexStart,
-  setIndexChunk: convexApi.appData.setIndexChunk
+  setIndexChunk: convexApi.appData.setIndexChunk,
+  commitIndex: convexApi.appData.commitIndex
 };
 mkdirSync(DATA_DIR, { recursive: true });
 
@@ -160,14 +161,14 @@ function toConvexValue(value) {
   return value;
 }
 
-function chunkForConvex(items = [], maxBytes = 100_000) {
+function chunkForConvex(items = [], maxBytes = 75_000, maxItems = 25) {
   const chunks = [];
   let current = [];
   let currentBytes = 2;
 
   for (const item of items) {
     const itemBytes = Buffer.byteLength(JSON.stringify(item), 'utf8') + 1;
-    if (current.length && currentBytes + itemBytes > maxBytes) {
+    if (current.length && (current.length >= maxItems || currentBytes + itemBytes > maxBytes)) {
       chunks.push(current);
       current = [];
       currentBytes = 2;
@@ -321,22 +322,21 @@ async function writeIndex(userId, index) {
   if (convex) {
     const cleanIndex = toConvexValue(index);
     const { channels = [], videos = [], errors = [], ...meta } = cleanIndex;
-    await convex.mutation(convexFns.replaceIndexStart, {
-      userId,
-      meta: {
-        ...meta,
-        channelCount: channels.length,
-        videoCount: videos.length,
-        errorCount: errors.length
-      }
-    });
+    const batchId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const nextMeta = {
+      ...meta,
+      channelCount: channels.length,
+      videoCount: videos.length,
+      errorCount: errors.length
+    };
 
-    const channelChunks = chunkForConvex(channels);
-    const videoChunks = chunkForConvex(videos);
+    const channelChunks = chunkForConvex(channels, 75_000, 50);
+    const videoChunks = chunkForConvex(videos, 50_000, 20);
     for (const [chunkIndex, items] of channelChunks.entries()) {
       try {
         await convex.mutation(convexFns.setIndexChunk, {
           userId,
+          batchId,
           kind: 'channels',
           chunkIndex,
           items
@@ -350,6 +350,7 @@ async function writeIndex(userId, index) {
       try {
         await convex.mutation(convexFns.setIndexChunk, {
           userId,
+          batchId,
           kind: 'videos',
           chunkIndex,
           items
@@ -359,6 +360,11 @@ async function writeIndex(userId, index) {
         throw error;
       }
     }
+    await convex.mutation(convexFns.commitIndex, {
+      userId,
+      batchId,
+      meta: nextMeta
+    });
     return;
   }
   mkdirSync(INDEX_DIR, { recursive: true });

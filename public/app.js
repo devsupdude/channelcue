@@ -398,6 +398,7 @@ function renderVideos(target, videos) {
               <span>${formatDate(video.publishedAt)}</span>
               ${video.duration ? `<span>${escapeHtml(video.duration)}</span>` : ''}
               ${video.viewCount ? `<span>${compactNumber(video.viewCount)} views</span>` : ''}
+              <a href="${video.url}" target="_blank" rel="noreferrer">Open video</a>
             </div>
           </div>
         </article>

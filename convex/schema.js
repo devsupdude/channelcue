@@ -26,11 +26,14 @@ export default defineSchema({
   }).index("by_user", ["userId"]),
   videoIndexChunks: defineTable({
     userId: v.string(),
+    batchId: v.optional(v.string()),
     kind: v.string(),
     chunkIndex: v.number(),
     items: v.any(),
     updatedAt: v.string()
   })
     .index("by_user", ["userId"])
+    .index("by_user_batch", ["userId", "batchId"])
     .index("by_user_kind_chunk", ["userId", "kind", "chunkIndex"])
+    .index("by_user_batch_kind_chunk", ["userId", "batchId", "kind", "chunkIndex"])
 });
