@@ -323,8 +323,19 @@ function renderAccountBanner(config = {}) {
 
 function renderTrial(config) {
   const trial = config?.defaultGoogleTrial;
+  const access = config?.access || trial || {};
   els.trialPanel.classList.toggle('hidden', !trial?.available);
   if (!trial?.available) return;
+
+  if (access.accessOverride === 'comped') {
+    const canUseDefaultGoogle = Boolean(access.defaultGoogleAccess);
+    els.trialStatus.textContent = canUseDefaultGoogle
+      ? 'ChannelCue access active. This account is comped and allowed to use the ChannelCue default Google credentials.'
+      : 'ChannelCue access active. This account is comped; save personal Google credentials below to connect YouTube.';
+    els.useDefaultKeyButton.textContent = canUseDefaultGoogle ? 'Default access active' : 'Comped access active';
+    els.useDefaultKeyButton.disabled = true;
+    return;
+  }
 
   if (config.usingDefaultGoogleConfig && trial.active) {
     els.trialStatus.textContent = `7-day trial active. ${trial.daysRemaining} day${trial.daysRemaining === 1 ? '' : 's'} remaining. Your Google access is ready for this trial.`;

@@ -58,13 +58,15 @@ export const getUserAccess = query({
           trialStartedAt: doc.trialStartedAt ?? null,
           subscriptionActive: doc.subscriptionActive,
           subscriptionEndsAt: doc.subscriptionEndsAt ?? null,
-          accessOverride: doc.accessOverride ?? "none"
+          accessOverride: doc.accessOverride ?? "none",
+          defaultGoogleAccess: doc.defaultGoogleAccess ?? false
         }
       : {
           trialStartedAt: null,
           subscriptionActive: false,
           subscriptionEndsAt: null,
-          accessOverride: "none"
+          accessOverride: "none",
+          defaultGoogleAccess: false
         };
   }
 });
@@ -103,7 +105,8 @@ export const setSubscriptionActive = mutation({
     userId: v.string(),
     subscriptionActive: v.boolean(),
     subscriptionEndsAt: v.optional(v.union(v.string(), v.null())),
-    accessOverride: v.optional(v.string())
+    accessOverride: v.optional(v.string()),
+    defaultGoogleAccess: v.optional(v.boolean())
   },
   handler: async (ctx, args) => {
     const updatedAt = new Date().toISOString();
@@ -119,6 +122,7 @@ export const setSubscriptionActive = mutation({
       };
       if (args.subscriptionEndsAt !== undefined) patch.subscriptionEndsAt = args.subscriptionEndsAt || undefined;
       if (args.accessOverride !== undefined) patch.accessOverride = args.accessOverride;
+      if (args.defaultGoogleAccess !== undefined) patch.defaultGoogleAccess = args.defaultGoogleAccess;
       await ctx.db.patch(existing._id, patch);
     } else {
       const doc = {
@@ -128,6 +132,7 @@ export const setSubscriptionActive = mutation({
       };
       if (args.subscriptionEndsAt) doc.subscriptionEndsAt = args.subscriptionEndsAt;
       if (args.accessOverride) doc.accessOverride = args.accessOverride;
+      if (args.defaultGoogleAccess !== undefined) doc.defaultGoogleAccess = args.defaultGoogleAccess;
       await ctx.db.insert("userAccess", doc);
     }
     return null;
