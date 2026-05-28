@@ -55,10 +55,18 @@ input {
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   color: var(--ink);
   font-size: 1.15rem;
   font-weight: 900;
   text-decoration: none;
+}
+
+.brand img {
+  width: 34px;
+  height: 34px;
 }
 
 .eyebrow {
@@ -386,7 +394,8 @@ button:disabled {
 }
 
 .trial-panel,
-.pricing-note {
+.pricing-note,
+.brand-assets {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -398,7 +407,8 @@ button:disabled {
 }
 
 .trial-panel p,
-.pricing-note p {
+.pricing-note p,
+.brand-assets p {
   margin-bottom: 0;
   color: var(--muted);
   font-size: 0.86rem;
@@ -408,6 +418,18 @@ button:disabled {
   display: block;
   border-color: rgba(197, 138, 29, 0.35);
   background: #fff8e6;
+}
+
+.brand-assets {
+  border-color: rgba(19, 122, 127, 0.28);
+  background: #eef8f7;
+}
+
+.asset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .controls {
@@ -719,8 +741,13 @@ input:focus {
     grid-template-columns: 1fr;
   }
 
-  .trial-panel {
+  .trial-panel,
+  .brand-assets {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .asset-actions {
+    justify-content: stretch;
   }
 }

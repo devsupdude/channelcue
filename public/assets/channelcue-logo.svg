@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 240" role="img" aria-labelledby="title desc">
+  <title id="title">ChannelCue logo</title>
+  <desc id="desc">ChannelCue wordmark with cue play icon.</desc>
+  <defs>
+    <linearGradient id="iconBg" x1="28" x2="204" y1="24" y2="216" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f9fbf8"/>
+      <stop offset="1" stop-color="#e9f4f1"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="50" x2="190" y1="50" y2="190" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#15929a"/>
+      <stop offset="1" stop-color="#0d5f66"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="224" height="224" rx="52" fill="url(#iconBg)"/>
+  <path d="M120 42c43 0 78 35 78 78s-35 78-78 78-78-35-78-78 35-78 78-78Zm0 30c-27 0-48 21-48 48s21 48 48 48 48-21 48-48-21-48-48-48Z" fill="url(#ring)"/>
+  <path d="M109 92c0-9 10-14 17-9l43 27c7 4 7 16 0 20l-43 27c-7 5-17 0-17-9V92Z" fill="#c9342f"/>
+  <circle cx="74" cy="74" r="12" fill="#c58a1d"/>
+  <path d="M74 48V28M48 74H28M56 56 42 42" stroke="#c58a1d" stroke-width="9" stroke-linecap="round"/>
+  <text x="270" y="116" fill="#1b2321" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="72" font-weight="900" letter-spacing="0">ChannelCue</text>
+  <text x="274" y="168" fill="#137a7f" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="26" font-weight="800" letter-spacing="3">WATCH WITHOUT WANDERING</text>
+</svg>
