@@ -503,8 +503,19 @@ function asNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function safeString(value = '') {
+  return String(value || '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, ' ')
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '')
+    .replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+}
+
+function isValidYouTubeId(value) {
+  return /^[A-Za-z0-9_-]+$/.test(String(value || ''));
+}
+
 function cleanText(value = '') {
-  return value
+  return safeString(value)
     .replace(/https?:\/\/\S+/g, '')
     .replace(/[#@][\w-]+/g, '')
     .replace(/\s+/g, ' ')
@@ -512,7 +523,7 @@ function cleanText(value = '') {
 }
 
 function limitText(value = '', maxLength = 600) {
-  const text = cleanText(String(value || ''));
+  const text = cleanText(value);
   if (text.length <= maxLength) return text;
   return `${text.slice(0, Math.max(0, maxLength - 3)).trim()}...`;
 }
@@ -538,16 +549,16 @@ function mapVideo(item, details = {}) {
   const snippet = item.snippet || {};
   const stats = details.statistics || {};
   const content = details.contentDetails || {};
-  const id = item.contentDetails?.videoId || item.id?.videoId || item.id;
+  const id = safeString(item.contentDetails?.videoId || item.id?.videoId || item.id).trim();
   const publishedAt = item.contentDetails?.videoPublishedAt || snippet.publishedAt;
   return {
     id,
-    title: snippet.title,
-    channelId: snippet.channelId,
-    channelTitle: snippet.channelTitle,
-    description: snippet.description,
+    title: safeString(snippet.title),
+    channelId: safeString(snippet.channelId).trim(),
+    channelTitle: safeString(snippet.channelTitle),
+    description: safeString(snippet.description),
     publishedAt,
-    thumbnail: snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url,
+    thumbnail: safeString(snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url),
     url: `https://www.youtube.com/watch?v=${id}`,
     viewCount: asNumber(stats.viewCount),
     likeCount: asNumber(stats.likeCount),
@@ -565,12 +576,12 @@ function compactChannelForIndex(channel = {}, details = {}) {
   const statistics = details.statistics || {};
   return {
     id: String(channel.id || ''),
-    title: String(snippet.title || channel.title || 'Untitled channel'),
+    title: safeString(snippet.title || channel.title || 'Untitled channel'),
     description: limitText(snippet.description || channel.description, INDEX_CHANNEL_DESCRIPTION_LIMIT),
     thumbnail:
       snippet.thumbnails?.medium?.url ||
       snippet.thumbnails?.default?.url ||
-      channel.thumbnail ||
+      safeString(channel.thumbnail) ||
       '',
     subscriberCount: asNumber(statistics.subscriberCount),
     videoCount: asNumber(statistics.videoCount),
@@ -583,18 +594,18 @@ function compactVideoForIndex(video = {}) {
   const description = limitText(video.description, INDEX_DESCRIPTION_LIMIT);
   const summary = video.summary || makeSummary({ ...video, description });
   return {
-    id: String(video.id || ''),
-    title: String(video.title || 'Untitled video'),
-    channelId: String(video.channelId || ''),
-    channelTitle: String(video.channelTitle || 'Channel'),
+    id: safeString(video.id || '').trim(),
+    title: safeString(video.title || 'Untitled video'),
+    channelId: safeString(video.channelId || '').trim(),
+    channelTitle: safeString(video.channelTitle || 'Channel'),
     description,
     searchText: limitText(`${video.title || ''} ${video.channelTitle || ''} ${description}`, 1000),
     publishedAt: video.publishedAt || null,
-    thumbnail: video.thumbnail || '',
+    thumbnail: safeString(video.thumbnail || ''),
     url: video.url || (video.id ? `https://www.youtube.com/watch?v=${video.id}` : ''),
     viewCount: video.viewCount,
     likeCount: video.likeCount,
-    duration: video.duration || '',
+    duration: safeString(video.duration || ''),
     summary
   };
 }
@@ -689,22 +700,51 @@ function chunk(items, size) {
 
 async function getChannelIndexDetails(youtube, channels) {
   const channelDetails = new Map();
-  for (const channelChunk of chunk(channels, 50)) {
-    const response = await youtube.channels.list({
-      part: ['snippet', 'statistics', 'contentDetails'],
-      id: channelChunk.map(channel => channel.id),
-      maxResults: 50
-    });
 
-    for (const item of response.data.items || []) {
-      const playlistId = item.contentDetails?.relatedPlaylists?.uploads;
-      channelDetails.set(item.id, {
-        uploadsPlaylistId: playlistId,
-        snippet: item.snippet || {},
-        statistics: item.statistics || {}
+  async function fetchChannelChunk(channelChunk, label) {
+    const ids = channelChunk
+      .map(channel => safeString(channel.id).trim())
+      .filter(isValidYouTubeId);
+    if (!ids.length) return;
+
+    try {
+      const response = await youtube.channels.list({
+        part: ['snippet', 'statistics', 'contentDetails'],
+        id: ids,
+        maxResults: 50
       });
+
+      for (const item of response.data.items || []) {
+        const playlistId = safeString(item.contentDetails?.relatedPlaylists?.uploads).trim();
+        channelDetails.set(item.id, {
+          uploadsPlaylistId: isValidYouTubeId(playlistId) ? playlistId : '',
+          snippet: item.snippet || {},
+          statistics: item.statistics || {}
+        });
+      }
+    } catch (error) {
+      const message = error.response?.data?.error?.message || error.message || '';
+      if (channelChunk.length > 1 && /pattern|invalid|bad request/i.test(message)) {
+        const midpoint = Math.ceil(channelChunk.length / 2);
+        console.warn(`YouTube channel batch ${label} failed validation. Splitting smaller. ${message}`);
+        await fetchChannelChunk(channelChunk.slice(0, midpoint), `${label}a`);
+        await fetchChannelChunk(channelChunk.slice(midpoint), `${label}b`);
+        return;
+      }
+
+      if (channelChunk.length === 1 && /pattern|invalid|bad request/i.test(message)) {
+        console.warn(`Skipping channel ${channelChunk[0]?.id || 'unknown'} because YouTube rejected its ID. ${message}`);
+        return;
+      }
+
+      throw error;
     }
   }
+
+  for (const [chunkIndex, channelChunk] of chunk(channels, 50).entries()) {
+    await fetchChannelChunk(channelChunk, `${chunkIndex + 1}`);
+  }
+
   return channelDetails;
 }
 
@@ -719,7 +759,7 @@ async function refreshVideoIndex(userId, youtube, subscriptions, options = {}) {
 
   for (const channel of subscriptions) {
     const playlistId = channelDetails.get(channel.id)?.uploadsPlaylistId;
-    if (!playlistId) continue;
+    if (!isValidYouTubeId(playlistId)) continue;
 
     try {
       const response = await youtube.playlistItems.list({
@@ -730,7 +770,7 @@ async function refreshVideoIndex(userId, youtube, subscriptions, options = {}) {
 
       for (const item of response.data.items || []) {
         const video = mapVideo(item);
-        if (video.id) videosById.set(video.id, video);
+        if (isValidYouTubeId(video.id)) videosById.set(video.id, video);
       }
     } catch (error) {
       errors.push({
