@@ -246,9 +246,8 @@ function getDefaultGoogleConfig() {
 
 async function getTrialInfo(userId) {
   const access = await getUserAccess(userId);
-  const startedAt =
-    access.trialStartedAt ||
-    (await getConfigValue(userId, 'DEFAULT_GOOGLE_TRIAL_STARTED_AT'));
+  const legacyStartedAt = await getConfigValue(userId, 'DEFAULT_GOOGLE_TRIAL_STARTED_AT');
+  const startedAt = access.trialStartedAt || legacyStartedAt;
   const defaultConfig = getDefaultGoogleConfig();
   const available = Boolean(defaultConfig.clientId && defaultConfig.clientSecret);
 
@@ -971,6 +970,11 @@ app.post('/api/config/google/use-default', async (req, res, next) => {
     }
     if (!trial.startedAt) {
       await startUserTrial(userId);
+    } else {
+      const access = await getUserAccess(userId);
+      if (!access.trialStartedAt) {
+        await startUserTrial(userId, trial.startedAt);
+      }
     }
 
     const nextTrial = await getTrialInfo(userId);
