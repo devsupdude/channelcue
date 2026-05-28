@@ -323,43 +323,73 @@ async function writeIndex(userId, index) {
     const cleanIndex = toConvexValue(index);
     const { channels = [], videos = [], errors = [], ...meta } = cleanIndex;
     const batchId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    async function writeAdaptiveChunks(kind, chunks) {
+      let nextChunkIndex = 0;
+      let savedCount = 0;
+      let skippedCount = 0;
+
+      async function writeItems(items, label) {
+        if (!items.length) return;
+
+        const chunkIndex = nextChunkIndex;
+        const payloadBytes = Buffer.byteLength(JSON.stringify(items), 'utf8');
+        try {
+          await convex.mutation(convexFns.setIndexChunk, {
+            userId,
+            batchId,
+            kind,
+            chunkIndex,
+            items
+          });
+          nextChunkIndex += 1;
+          savedCount += items.length;
+        } catch (error) {
+          if (items.length > 1) {
+            const midpoint = Math.ceil(items.length / 2);
+            console.warn(
+              `Convex ${kind} chunk ${label} failed with ${items.length} items/${payloadBytes} bytes. Splitting smaller. ${error.message}`
+            );
+            await writeItems(items.slice(0, midpoint), `${label}a`);
+            await writeItems(items.slice(midpoint), `${label}b`);
+            return;
+          }
+
+          skippedCount += 1;
+          console.error(
+            `Skipping one ${kind} item that Convex rejected during index write: ${items[0]?.id || 'unknown id'} (${payloadBytes} bytes). ${error.message}`
+          );
+        }
+      }
+
+      for (const [chunkIndex, items] of chunks.entries()) {
+        await writeItems(items, `${chunkIndex + 1}/${chunks.length}`);
+      }
+
+      return { savedCount, skippedCount, chunkCount: nextChunkIndex };
+    }
+
+    const channelChunks = chunkForConvex(channels, 50_000, 25);
+    const videoChunks = chunkForConvex(videos, 25_000, 10);
+    const channelWrite = await writeAdaptiveChunks('channels', channelChunks);
+    const videoWrite = await writeAdaptiveChunks('videos', videoChunks);
+
+    if (channels.length && !channelWrite.savedCount) {
+      throw new Error('Convex rejected every channel index chunk, so ChannelCue kept the previous saved index.');
+    }
+    if (videos.length && !videoWrite.savedCount) {
+      throw new Error('Convex rejected every video index chunk, so ChannelCue kept the previous saved index.');
+    }
+
     const nextMeta = {
       ...meta,
-      channelCount: channels.length,
-      videoCount: videos.length,
-      errorCount: errors.length
+      channelCount: channelWrite.savedCount,
+      videoCount: videoWrite.savedCount,
+      errorCount: errors.length,
+      skippedChannelCount: channelWrite.skippedCount,
+      skippedVideoCount: videoWrite.skippedCount
     };
 
-    const channelChunks = chunkForConvex(channels, 75_000, 50);
-    const videoChunks = chunkForConvex(videos, 50_000, 20);
-    for (const [chunkIndex, items] of channelChunks.entries()) {
-      try {
-        await convex.mutation(convexFns.setIndexChunk, {
-          userId,
-          batchId,
-          kind: 'channels',
-          chunkIndex,
-          items
-        });
-      } catch (error) {
-        error.message = `Convex channel index chunk ${chunkIndex + 1}/${channelChunks.length} failed with ${items.length} items: ${error.message}`;
-        throw error;
-      }
-    }
-    for (const [chunkIndex, items] of videoChunks.entries()) {
-      try {
-        await convex.mutation(convexFns.setIndexChunk, {
-          userId,
-          batchId,
-          kind: 'videos',
-          chunkIndex,
-          items
-        });
-      } catch (error) {
-        error.message = `Convex video index chunk ${chunkIndex + 1}/${videoChunks.length} failed with ${items.length} items: ${error.message}`;
-        throw error;
-      }
-    }
     await convex.mutation(convexFns.commitIndex, {
       userId,
       batchId,
