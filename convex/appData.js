@@ -43,6 +43,65 @@ export const setConfigValues = mutation({
   }
 });
 
+export const getSession = query({
+  args: {
+    sid: v.string()
+  },
+  handler: async (ctx, args) => {
+    const doc = await ctx.db
+      .query("appSessions")
+      .withIndex("by_sid", q => q.eq("sid", args.sid))
+      .unique();
+
+    if (!doc) return null;
+    if (doc.expiresAt <= Date.now()) return null;
+    return doc.data;
+  }
+});
+
+export const setSession = mutation({
+  args: {
+    sid: v.string(),
+    data: v.any(),
+    expiresAt: v.number()
+  },
+  handler: async (ctx, args) => {
+    const updatedAt = new Date().toISOString();
+    const existing = await ctx.db
+      .query("appSessions")
+      .withIndex("by_sid", q => q.eq("sid", args.sid))
+      .unique();
+
+    const doc = {
+      sid: args.sid,
+      data: args.data,
+      expiresAt: args.expiresAt,
+      updatedAt
+    };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, doc);
+    } else {
+      await ctx.db.insert("appSessions", doc);
+    }
+    return null;
+  }
+});
+
+export const destroySession = mutation({
+  args: {
+    sid: v.string()
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("appSessions")
+      .withIndex("by_sid", q => q.eq("sid", args.sid))
+      .unique();
+    if (existing) await ctx.db.delete(existing._id);
+    return null;
+  }
+});
+
 export const getIndex = query({
   args: {
     userId: v.string()

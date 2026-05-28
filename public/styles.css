@@ -585,6 +585,61 @@ input:focus {
   margin-top: 14px;
 }
 
+.legal-page {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.legal-page .brand {
+  display: inline-flex;
+  margin-bottom: 24px;
+}
+
+.legal-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 28px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.legal-card h1 {
+  margin-bottom: 18px;
+  font-size: clamp(2rem, 5vw, 3.2rem);
+}
+
+.legal-card h2 {
+  margin: 26px 0 8px;
+  font-size: 1.15rem;
+}
+
+.legal-card p,
+.legal-card li {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  justify-content: center;
+  margin: 26px 0 6px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.site-footer a {
+  color: var(--teal);
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.site-footer a:hover {
+  text-decoration: underline;
+}
+
 @media (max-width: 860px) {
   .shell {
     padding: 18px;

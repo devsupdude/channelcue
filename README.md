@@ -15,6 +15,8 @@ Open <http://localhost:3000>.
 
 This repo includes `vercel.json` so Vercel routes requests through the Express serverless function.
 
+For production, use the checklist in `docs/production-checklist.md`.
+
 Important production note: Vercel serverless file storage is temporary. This app supports Convex as durable storage for production data:
 
 - per-user Google OAuth client ID/secret
@@ -32,6 +34,12 @@ Then add the Convex deployment URL to Vercel:
 
 ```text
 CONVEX_URL=
+```
+
+Also set the canonical app URL so Google OAuth redirects use your production domain even when Vercel receives proxied requests:
+
+```text
+APP_BASE_URL=https://www.channelcue.com
 ```
 
 If `CONVEX_URL` is not set, the app falls back to JSON files locally and `/tmp` on Vercel. That fallback can prevent crashes, but it is not durable enough for a paid production app.
@@ -108,7 +116,20 @@ CLERK_SECRET_KEY=
 
 Without Clerk keys, the prototype runs in local development mode. With Clerk keys, Google OAuth configuration is saved per signed-in Clerk user.
 
-The app requests the read-only YouTube scope and stores OAuth tokens only in the local development session.
+The app requests the read-only YouTube scope. In production with Convex configured, app sessions are stored in Convex so Google OAuth can complete reliably on Vercel serverless functions.
+
+## Production OAuth Review
+
+ChannelCue includes public homepage, privacy policy, terms, and support pages for Google OAuth review:
+
+```text
+https://www.channelcue.com/
+https://www.channelcue.com/privacy.html
+https://www.channelcue.com/terms.html
+https://www.channelcue.com/support.html
+```
+
+Before submitting to Google, replace the draft policy text with your final business/legal details. Google may require OAuth verification because the app requests the YouTube readonly scope.
 
 ## Shared-key trial
 

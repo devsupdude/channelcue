@@ -8,6 +8,12 @@ export default defineSchema({
     value: v.string(),
     updatedAt: v.string()
   }).index("by_user_key", ["userId", "key"]),
+  appSessions: defineTable({
+    sid: v.string(),
+    data: v.any(),
+    expiresAt: v.number(),
+    updatedAt: v.string()
+  }).index("by_sid", ["sid"]),
   videoIndexes: defineTable({
     userId: v.string(),
     index: v.any(),

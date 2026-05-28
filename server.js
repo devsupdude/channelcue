@@ -13,6 +13,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
 const IS_VERCEL = Boolean(process.env.VERCEL);
 const REDIRECT_PATH = '/oauth2callback';
+const APP_BASE_URL = (process.env.APP_BASE_URL || '').replace(/\/+$/, '');
 const YOUTUBE_SCOPE = 'https://www.googleapis.com/auth/youtube.readonly';
 const INDEX_UPLOADS_PER_CHANNEL = Number(process.env.INDEX_UPLOADS_PER_CHANNEL || 25);
 const INDEX_REFRESH_MINUTES = Number(process.env.INDEX_REFRESH_MINUTES || 60);
@@ -33,6 +34,9 @@ const convex = CONVEX_URL ? new ConvexHttpClient(CONVEX_URL) : null;
 const convexFns = {
   getConfigValue: convexApi.appData.getConfigValue,
   setConfigValues: convexApi.appData.setConfigValues,
+  getSession: convexApi.appData.getSession,
+  setSession: convexApi.appData.setSession,
+  destroySession: convexApi.appData.destroySession,
   getIndex: convexApi.appData.getIndex,
   setIndex: convexApi.appData.setIndex,
   replaceIndexStart: convexApi.appData.replaceIndexStart,
@@ -40,18 +44,67 @@ const convexFns = {
 };
 mkdirSync(DATA_DIR, { recursive: true });
 
+class ConvexSessionStore extends session.Store {
+  constructor(client, fns) {
+    super();
+    this.client = client;
+    this.fns = fns;
+  }
+
+  get(sid, callback) {
+    this.client
+      .query(this.fns.getSession, { sid })
+      .then(data => callback(null, data || null))
+      .catch(error => callback(error));
+  }
+
+  set(sid, sess, callback) {
+    const expiresAt = sess.cookie?.expires
+      ? new Date(sess.cookie.expires).getTime()
+      : Date.now() + 7 * 24 * 60 * 60 * 1000;
+
+    this.client
+      .mutation(this.fns.setSession, {
+        sid,
+        data: toConvexValue(sess),
+        expiresAt
+      })
+      .then(() => callback?.(null))
+      .catch(error => callback?.(error));
+  }
+
+  destroy(sid, callback) {
+    this.client
+      .mutation(this.fns.destroySession, { sid })
+      .then(() => callback?.(null))
+      .catch(error => callback?.(error));
+  }
+}
+
 const app = express();
 app.set('trust proxy', 1);
+
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (req.path.startsWith('/api/') || req.path === REDIRECT_PATH) {
+    res.setHeader('Cache-Control', 'no-store');
+  }
+  next();
+});
 
 app.use(express.json());
 app.use(
   session({
+    store: convex ? new ConvexSessionStore(convex, convexFns) : undefined,
     secret: process.env.SESSION_SECRET || 'dev-session-secret-change-me',
     resave: false,
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      sameSite: 'lax'
+      sameSite: 'lax',
+      secure: IS_VERCEL || process.env.NODE_ENV === 'production'
     }
   })
 );
@@ -306,6 +359,7 @@ function delay(ms) {
 }
 
 function getRedirectUrl(req) {
+  if (APP_BASE_URL) return `${APP_BASE_URL}${REDIRECT_PATH}`;
   const forwardedProto = String(req.get('x-forwarded-proto') || '').split(',')[0].trim();
   const forwardedHost = String(req.get('x-forwarded-host') || '').split(',')[0].trim();
   const protocol = forwardedProto || req.protocol;
@@ -825,6 +879,10 @@ app.get(REDIRECT_PATH, async (req, res, next) => {
 
 app.post('/auth/logout', (req, res) => {
   req.session.destroy(() => res.json({ ok: true }));
+});
+
+app.get('/healthz', (_req, res) => {
+  res.json({ ok: true, app: 'ChannelCue' });
 });
 
 app.get('/api/subscriptions', async (req, res, next) => {
