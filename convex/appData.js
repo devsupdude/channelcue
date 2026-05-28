@@ -107,6 +107,18 @@ export const getIndex = query({
     userId: v.string()
   },
   handler: async (ctx, args) => {
+    const uniqueById = items => {
+      const seen = new Set();
+      const unique = [];
+      for (const item of items || []) {
+        const id = item?.id;
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        unique.push(item);
+      }
+      return unique;
+    };
+
     const metaDoc = await ctx.db
       .query("videoIndexMetas")
       .withIndex("by_user", q => q.eq("userId", args.userId))
@@ -124,11 +136,18 @@ export const getIndex = query({
             .withIndex("by_user", q => q.eq("userId", args.userId))
             .collect();
 
-      const byKind = kind =>
-        chunks
-          .filter(chunk => chunk.kind === kind && (!activeBatchId || chunk.batchId === activeBatchId))
+      const byKind = kind => {
+        const matchingChunks = chunks
+          .filter(chunk => {
+            const fromActiveBatch = activeBatchId
+              ? chunk.batchId === activeBatchId
+              : !chunk.batchId;
+            return chunk.kind === kind && fromActiveBatch;
+          })
           .sort((a, b) => a.chunkIndex - b.chunkIndex)
           .flatMap(chunk => chunk.items || []);
+        return uniqueById(matchingChunks);
+      };
 
       return {
         ...metaDoc.meta,
@@ -259,7 +278,7 @@ export const commitIndex = mutation({
       .withIndex("by_user", q => q.eq("userId", args.userId))
       .collect();
     for (const chunk of staleChunks) {
-      if (chunk.batchId && chunk.batchId !== args.batchId) {
+      if (chunk.batchId !== args.batchId) {
         await ctx.db.delete(chunk._id);
       }
     }
