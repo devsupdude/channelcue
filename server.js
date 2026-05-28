@@ -782,7 +782,7 @@ app.post('/api/config/google/use-default', async (req, res, next) => {
     }
     if (trial.expired) {
       res.status(403).json({
-        error: 'Your free shared-key trial has ended. Add your own Google client ID and secret in Configuration to keep using the app.'
+        error: 'Your 7-day trial has ended. Add your own Google client ID and secret in Configuration to keep using the app.'
       });
       return;
     }

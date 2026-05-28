@@ -7,8 +7,8 @@ const state = {
   useSharedGoogleKey: false
 };
 
-const SHARED_CLIENT_ID_MASK = '******** shared Google client ID ********';
-const SHARED_CLIENT_SECRET_MASK = '******** shared Google client secret ********';
+const SHARED_CLIENT_ID_MASK = '******** ChannelCue trial client ID ********';
+const SHARED_CLIENT_SECRET_MASK = '******** ChannelCue trial client secret ********';
 
 const els = {
   notice: document.querySelector('#notice'),
@@ -266,7 +266,7 @@ function renderAccountBanner(config = {}) {
   if (expired) {
     els.accountBannerTitle.textContent = 'Thanks for using ChannelCue Pro';
     els.accountBannerMessage.textContent =
-      'Your 7-day shared-key trial has ended. Tell your friends if ChannelCue helped, then pay now or add your own Google keys in Configuration.';
+      'Your 7-day trial has ended. Tell your friends if ChannelCue helped, then pay now or add your own Google keys in Configuration.';
     return;
   }
 
@@ -275,7 +275,7 @@ function renderAccountBanner(config = {}) {
       els.accountConnectButton.textContent = 'Choose Google key';
       els.accountBannerTitle.textContent = 'Next step: choose Google access';
       els.accountBannerMessage.textContent =
-        'ChannelCue login is complete. Start with the 7-day shared-key trial, or add your own Google client ID and secret.';
+        'ChannelCue login is complete. Start the 7-day trial, or add your own Google client ID and secret.';
       return;
     }
 
@@ -299,14 +299,14 @@ function renderTrial(config) {
   if (!trial?.available) return;
 
   if (config.usingDefaultGoogleConfig && trial.active) {
-    els.trialStatus.textContent = `Shared key trial active. ${trial.daysRemaining} day${trial.daysRemaining === 1 ? '' : 's'} remaining. Your Google credentials are ready for this trial.`;
+    els.trialStatus.textContent = `7-day trial active. ${trial.daysRemaining} day${trial.daysRemaining === 1 ? '' : 's'} remaining. Your Google access is ready for this trial.`;
     els.useDefaultKeyButton.textContent = 'Trial active';
     els.useDefaultKeyButton.disabled = true;
     return;
   }
 
   if (trial.expired) {
-    els.trialStatus.textContent = `Your shared-key trial ended. Add your own Google credentials to continue. Continued access is $${config.annualPriceUsd || 36}/year.`;
+    els.trialStatus.textContent = `Your 7-day trial ended. Add your own Google credentials to continue. Continued access is $${config.annualPriceUsd || 36}/year.`;
     els.useDefaultKeyButton.textContent = 'Trial ended';
     els.useDefaultKeyButton.disabled = true;
     renderHeroState(config);
@@ -315,12 +315,12 @@ function renderTrial(config) {
 
   if (state.useSharedGoogleKey) {
     els.trialStatus.textContent =
-      'Shared Google key selected. The client ID and secret are masked here and stay private on the server. Click Save configuration to start your 7-day trial.';
-    els.useDefaultKeyButton.textContent = 'Shared key selected';
+      '7-day trial selected. The trial client ID and secret are masked here and stay private on the server. Click Save configuration to start your trial.';
+    els.useDefaultKeyButton.textContent = 'Trial selected';
     els.useDefaultKeyButton.disabled = true;
   } else {
-    els.trialStatus.textContent = `Use the shared Google key free for ${trial.daysRemaining || 7} days. The Google client ID and secret stay private on the server. Click Use My Key for 7 Days, then save to start the trial.`;
-    els.useDefaultKeyButton.textContent = 'Use My Key for 7 Days';
+    els.trialStatus.textContent = `Start with ChannelCue trial access for ${trial.daysRemaining || 7} days. The trial client ID and secret stay private on the server. Click Start 7-day trial, then save to begin.`;
+    els.useDefaultKeyButton.textContent = 'Start 7-day trial';
     els.useDefaultKeyButton.disabled = false;
   }
   renderHeroState(config);
@@ -656,10 +656,10 @@ els.authButton.addEventListener('click', async () => {
 els.useDefaultKeyButton.addEventListener('click', async () => {
   setSharedGoogleKeySelection(true);
   els.trialStatus.textContent =
-    'Shared Google key selected. The client ID and secret are masked here and stay private on the server. Click Save configuration to start your 7-day trial.';
-  els.useDefaultKeyButton.textContent = 'Shared key selected';
+    '7-day trial selected. The trial client ID and secret are masked here and stay private on the server. Click Save configuration to start your trial.';
+  els.useDefaultKeyButton.textContent = 'Trial selected';
   els.useDefaultKeyButton.disabled = true;
-  showNotice('Shared Google key selected. Click Save configuration to start your 7-day trial.');
+  showNotice('7-day trial selected. Click Save configuration to start it.');
 });
 
 els.setupForm.addEventListener('submit', async event => {
@@ -684,7 +684,7 @@ els.setupForm.addEventListener('submit', async event => {
     updateAuthUi(true);
     showNotice(
       state.useSharedGoogleKey
-        ? 'Shared Google key trial started. You can connect YouTube now.'
+        ? 'Your 7-day trial has started. You can connect YouTube now.'
         : 'Configuration saved. You can update these Google keys any time from Configuration.'
     );
     await loadGoogleConfig();
