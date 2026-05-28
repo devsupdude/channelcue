@@ -158,7 +158,7 @@ function toConvexValue(value) {
   return value;
 }
 
-function chunkForConvex(items = [], maxBytes = 500_000) {
+function chunkForConvex(items = [], maxBytes = 200_000) {
   const chunks = [];
   let current = [];
   let currentBytes = 2;
