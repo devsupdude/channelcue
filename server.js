@@ -1192,8 +1192,8 @@ app.use((error, req, res, _next) => {
   if (isYouTubeQuotaError(error)) {
     res.status(429).json({
       error:
-        'Sorry, we can only provide the trial while tokens are available. Please try again later or upgrade to the paid plan.',
-      code: 'TRIAL_TOKENS_EXHAUSTED',
+        'YouTube has paused this request because the Google API quota for the connected credentials has been reached. ChannelCue is ready to keep working, but Google controls this daily limit. Please wait for the YouTube API quota to reset, or add your own Google OAuth credentials in Configuration.',
+      code: 'YOUTUBE_API_QUOTA_EXCEEDED',
       paymentLinkUrl: PAYMENT_LINK_URL
     });
     return;

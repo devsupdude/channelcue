@@ -91,7 +91,7 @@ async function api(path, options = {}) {
 
 function showUpgradeCta(message, paymentLinkUrl = '') {
   els.accountBanner.classList.remove('hidden');
-  els.accountBannerTitle.textContent = 'Trial tokens are unavailable';
+  els.accountBannerTitle.textContent = 'YouTube API quota reached';
   els.accountBannerMessage.textContent = message;
   els.accountConnectButton.classList.add('hidden');
   els.accountIndexButton.classList.add('hidden');
@@ -100,7 +100,7 @@ function showUpgradeCta(message, paymentLinkUrl = '') {
   if (paymentLinkUrl) {
     els.accountPayLink.href = paymentLinkUrl;
     els.accountPayLink.removeAttribute('aria-disabled');
-    els.accountPayLink.textContent = 'Upgrade to paid plan';
+    els.accountPayLink.textContent = 'Manage plan';
   } else {
     els.accountPayLink.href = '#';
     els.accountPayLink.setAttribute('aria-disabled', 'true');
@@ -109,7 +109,10 @@ function showUpgradeCta(message, paymentLinkUrl = '') {
 }
 
 function handleAppError(error) {
-  if (error.payload?.code === 'TRIAL_TOKENS_EXHAUSTED') {
+  if (
+    error.payload?.code === 'YOUTUBE_API_QUOTA_EXCEEDED' ||
+    error.payload?.code === 'TRIAL_TOKENS_EXHAUSTED'
+  ) {
     showUpgradeCta(error.message, error.payload.paymentLinkUrl);
   }
   showNotice(error.message);
