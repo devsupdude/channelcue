@@ -1,6 +1,8 @@
 const state = {
   connected: false,
   subscriptions: [],
+  cachedVideos: [],
+  cachedIndexLoaded: false,
   clerkConfigured: false,
   signedIn: false,
   googleConfigured: false,
@@ -355,13 +357,14 @@ function renderSubscriptions() {
 function renderChannel(channel) {
   els.channelEmpty.classList.add('hidden');
   els.channelDetails.classList.remove('hidden');
+  const channelUrl = channel.url || `https://www.youtube.com/channel/${channel.id}`;
   els.channelDetails.innerHTML = `
     <article class="channel-card">
       <div class="channel-head">
         <img src="${channel.thumbnail || ''}" alt="" />
         <div>
           <h3>${escapeHtml(channel.title)}</h3>
-          <a href="${channel.url}" target="_blank" rel="noreferrer">Open channel</a>
+          <a href="${channelUrl}" target="_blank" rel="noreferrer">Open channel</a>
         </div>
       </div>
       <p class="channel-description">${escapeHtml(channel.description || 'No channel description available.')}</p>
@@ -433,6 +436,8 @@ async function loadSubscriptions() {
   try {
     const data = await api('/api/subscriptions');
     state.subscriptions = data.subscriptions;
+    state.cachedVideos = [];
+    state.cachedIndexLoaded = false;
     renderSubscriptions();
     await loadIndexStatus();
     if (state.subscriptions[0]) {
@@ -444,6 +449,33 @@ async function loadSubscriptions() {
   } catch (error) {
     setLoading(els.videoList, 'Could not load YouTube subscriptions.');
     handleAppError(error);
+  }
+}
+
+async function loadCachedIndex() {
+  try {
+    const index = await api('/api/index/library');
+    renderIndexStatus(index);
+    if (!index.channels?.length || !index.videos?.length) {
+      state.cachedVideos = [];
+      state.cachedIndexLoaded = false;
+      return false;
+    }
+
+    state.subscriptions = index.channels;
+    state.cachedVideos = index.videos;
+    state.cachedIndexLoaded = true;
+    renderSubscriptions();
+    if (state.subscriptions[0]) {
+      els.channelSelect.value = state.subscriptions[0].id;
+      renderCachedChannel(state.subscriptions[0].id);
+    }
+    showNotice(`Loaded saved index with ${index.videoCount} videos from ${index.channelCount} channels. Refresh only when you want newer uploads.`);
+    renderAccountBanner({ configured: state.googleConfigured, needsIndex: false });
+    return true;
+  } catch (error) {
+    if (state.signedIn) handleAppError(error);
+    return false;
   }
 }
 
@@ -469,6 +501,7 @@ async function refreshIndex() {
       body: JSON.stringify({})
     });
     renderIndexStatus(status);
+    await loadCachedIndex();
     showNotice(`Search index refreshed with ${status.videoCount} videos from ${status.channelCount} channels.`);
   } catch (error) {
     handleAppError(error);
@@ -480,8 +513,25 @@ async function refreshIndex() {
   }
 }
 
+function renderCachedChannel(channelId) {
+  const channel = state.subscriptions.find(item => item.id === channelId);
+  if (!channel) return;
+  const videos = state.cachedVideos
+    .filter(video => video.channelId === channelId)
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+    .slice(0, 8);
+  renderChannel(channel);
+  renderVideos(els.videoList, videos);
+  els.latestMeta.textContent = `${videos.length} cached videos`;
+}
+
 async function loadChannel(channelId) {
   if (!channelId) return;
+  if (state.cachedIndexLoaded && state.cachedVideos.length) {
+    renderCachedChannel(channelId);
+    return;
+  }
+
   setLoading(els.videoList, 'Fetching latest uploads...');
   els.latestMeta.textContent = '';
   const data = await api(`/api/channels/${encodeURIComponent(channelId)}/latest`);
@@ -586,8 +636,9 @@ async function init() {
     renderHeroState(status);
     updateAuthUi(status.configured);
     await loadGoogleConfig();
-    if (state.connected) await loadSubscriptions();
-    await loadIndexStatus();
+    const hasCachedIndex = await loadCachedIndex();
+    if (!hasCachedIndex && state.connected) await loadSubscriptions();
+    if (!hasCachedIndex) await loadIndexStatus();
   } catch (error) {
     handleAppError(error);
   }
@@ -699,6 +750,8 @@ els.logoutButton.addEventListener('click', async () => {
   await fetch('/auth/logout', { method: 'POST' });
   state.connected = false;
   state.subscriptions = [];
+  state.cachedVideos = [];
+  state.cachedIndexLoaded = false;
   renderSubscriptions();
   renderIndexStatus(null);
   updateAuthUi(state.googleConfigured);
@@ -713,6 +766,8 @@ els.subBriefLogoutButton.addEventListener('click', async () => {
   state.connected = false;
   state.signedIn = false;
   state.subscriptions = [];
+  state.cachedVideos = [];
+  state.cachedIndexLoaded = false;
   renderSubscriptions();
   renderIndexStatus(null);
   renderHeroState({});

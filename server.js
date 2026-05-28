@@ -523,7 +523,10 @@ async function listAllSubscriptions(youtube) {
         id: snippet.resourceId?.channelId,
         title: snippet.title,
         description: snippet.description,
-        thumbnail: snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url
+        thumbnail: snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url,
+        url: snippet.resourceId?.channelId
+          ? `https://www.youtube.com/channel/${snippet.resourceId.channelId}`
+          : ''
       });
     }
 
@@ -918,6 +921,28 @@ app.get('/api/index/status', async (req, res, next) => {
       uploadsPerChannel: index.uploadsPerChannel || INDEX_UPLOADS_PER_CHANNEL,
       refreshMinutes: INDEX_REFRESH_MINUTES,
       requestDelayMs: INDEX_REQUEST_DELAY_MS
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/index/library', async (req, res, next) => {
+  try {
+    const userId = requireAppUser(req, res);
+    if (!userId) return;
+    const index = await readIndex(userId);
+
+    res.json({
+      refreshedAt: index.refreshedAt,
+      stale: isIndexStale(index),
+      channelCount: index.channels?.length || 0,
+      videoCount: index.videos?.length || 0,
+      uploadsPerChannel: index.uploadsPerChannel || INDEX_UPLOADS_PER_CHANNEL,
+      refreshMinutes: INDEX_REFRESH_MINUTES,
+      requestDelayMs: INDEX_REQUEST_DELAY_MS,
+      channels: index.channels || [],
+      videos: index.videos || []
     });
   } catch (error) {
     next(error);
