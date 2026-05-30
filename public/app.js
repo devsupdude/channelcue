@@ -82,7 +82,20 @@ function setSearchBusy(isBusy, message = '') {
 
 async function api(path, options = {}) {
   const response = await fetch(path, options);
-  const data = await response.json();
+  const contentType = response.headers.get('content-type') || '';
+  const text = await response.text();
+  let data = {};
+
+  if (text && contentType.includes('application/json')) {
+    try {
+      data = JSON.parse(text);
+    } catch (_error) {
+      data = { error: 'ChannelCue received an unreadable server response. Please try the action again.' };
+    }
+  } else if (text) {
+    data = { error: text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() };
+  }
+
   if (!response.ok) {
     const error = new Error(data.error || 'Request failed.');
     error.payload = data;

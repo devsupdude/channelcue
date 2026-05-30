@@ -536,6 +536,15 @@ function isYouTubeQuotaError(error) {
   return error.code === 403 && message.includes('quota');
 }
 
+function isJsonParseResponseError(error) {
+  const message = String(error.message || '').toLowerCase();
+  return (
+    error instanceof SyntaxError ||
+    (message.includes('unexpected token') && message.includes('json')) ||
+    message.includes('not valid json')
+  );
+}
+
 function isConvexSetupError(error) {
   const message = String(error.message || '').toLowerCase();
   return message.includes('could not find public function') || message.includes('did you forget to run `npx convex dev`');
@@ -560,6 +569,12 @@ function safeString(value = '') {
 
 function isValidYouTubeId(value) {
   return /^[A-Za-z0-9_-]+$/.test(String(value || ''));
+}
+
+function uploadsPlaylistFromChannelId(channelId = '') {
+  const id = safeString(channelId).trim();
+  if (!id.startsWith('UC')) return '';
+  return `UU${id.slice(2)}`;
 }
 
 function cleanText(value = '') {
@@ -749,7 +764,7 @@ function chunk(items, size) {
 async function getChannelIndexDetails(youtube, channels) {
   const channelDetails = new Map();
 
-  async function fetchChannelChunk(channelChunk, label) {
+  async function fetchChannelChunk(channelChunk, label, attempt = 1) {
     const ids = channelChunk
       .map(channel => safeString(channel.id).trim())
       .filter(isValidYouTubeId);
@@ -772,6 +787,15 @@ async function getChannelIndexDetails(youtube, channels) {
       }
     } catch (error) {
       const message = error.response?.data?.error?.message || error.message || '';
+      if (isYouTubeQuotaError(error)) throw error;
+
+      if (isJsonParseResponseError(error) && attempt < 2) {
+        console.warn(`YouTube channel batch ${label} returned unreadable JSON. Retrying once. ${message}`);
+        await delay(500);
+        await fetchChannelChunk(channelChunk, label, attempt + 1);
+        return;
+      }
+
       if (channelChunk.length > 1 && /pattern|invalid|bad request/i.test(message)) {
         const midpoint = Math.ceil(channelChunk.length / 2);
         console.warn(`YouTube channel batch ${label} failed validation. Splitting smaller. ${message}`);
@@ -782,6 +806,27 @@ async function getChannelIndexDetails(youtube, channels) {
 
       if (channelChunk.length === 1 && /pattern|invalid|bad request/i.test(message)) {
         console.warn(`Skipping channel ${channelChunk[0]?.id || 'unknown'} because YouTube rejected its ID. ${message}`);
+        return;
+      }
+
+      if (isJsonParseResponseError(error)) {
+        console.warn(
+          `YouTube channel batch ${label} returned unreadable JSON. Falling back to derived uploads playlist IDs. ${message}`
+        );
+        for (const channel of channelChunk) {
+          const playlistId = uploadsPlaylistFromChannelId(channel.id);
+          if (playlistId) {
+            channelDetails.set(channel.id, {
+              uploadsPlaylistId: playlistId,
+              snippet: {
+                title: channel.title,
+                description: channel.description,
+                thumbnails: { medium: { url: channel.thumbnail }, default: { url: channel.thumbnail } }
+              },
+              statistics: {}
+            });
+          }
+        }
         return;
       }
 
@@ -1286,6 +1331,8 @@ app.use((error, req, res, _next) => {
   const message =
     googleError === 'invalid_client'
       ? 'Google rejected the OAuth client. Recheck that the saved client ID and client secret are from the same Google OAuth web client, then save Configuration again.'
+      : isJsonParseResponseError(error)
+        ? 'YouTube returned a response ChannelCue could not read during indexing. Your saved index was not cleared. Please wait a minute and try Refresh index again.'
       : error.response?.data?.error_description ||
         error.response?.data?.error?.message ||
         error.message ||
