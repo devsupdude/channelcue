@@ -5,6 +5,7 @@ import { ConvexHttpClient } from 'convex/browser';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { google } from 'googleapis';
 import { clerkMiddleware, getAuth } from '@clerk/express';
 import { api as convexApi } from './convex/_generated/api.js';
@@ -465,6 +466,28 @@ function getRedirectUrl(req) {
   const protocol = forwardedProto || req.protocol;
   const host = forwardedHost || req.get('host');
   return `${protocol}://${host}${REDIRECT_PATH}`;
+}
+
+function createOAuthState(req) {
+  const state = randomBytes(32).toString('base64url');
+  req.session.youtubeOAuthState = state;
+  return state;
+}
+
+function verifyOAuthState(req, receivedState) {
+  const expectedState = req.session.youtubeOAuthState;
+  delete req.session.youtubeOAuthState;
+
+  if (!expectedState || !receivedState) return false;
+  const expected = Buffer.from(String(expectedState));
+  const received = Buffer.from(String(receivedState));
+  return expected.length === received.length && timingSafeEqual(expected, received);
+}
+
+function saveSession(req) {
+  return new Promise((resolve, reject) => {
+    req.session.save(error => (error ? reject(error) : resolve()));
+  });
 }
 
 async function createOAuthClient(req) {
@@ -1103,11 +1126,14 @@ app.get('/auth/youtube', async (req, res, next) => {
       return;
     }
 
+    const state = createOAuthState(req);
     const url = client.generateAuthUrl({
       access_type: 'offline',
       prompt: 'consent',
+      state,
       scope: [YOUTUBE_SCOPE]
     });
+    await saveSession(req);
     res.redirect(url);
   } catch (error) {
     next(error);
@@ -1122,6 +1148,10 @@ app.get(REDIRECT_PATH, async (req, res, next) => {
     const client = await createOAuthClient(req);
     if (!client || !req.query.code) {
       res.redirect('/?error=oauth-failed');
+      return;
+    }
+    if (!verifyOAuthState(req, req.query.state)) {
+      res.redirect('/?error=oauth-state-mismatch');
       return;
     }
     const { tokens } = await client.getToken(String(req.query.code));
