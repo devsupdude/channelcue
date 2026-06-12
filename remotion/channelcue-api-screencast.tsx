@@ -28,14 +28,18 @@ const scenes = [
   { from: 0, label: 'Landing page', cue: 'Open ChannelCue landing page' },
   { from: 180, label: 'ChannelCue sign in', cue: 'Log in to ChannelCue' },
   { from: 360, label: 'Configuration', cue: 'Open Google OAuth setup' },
-  { from: 570, label: 'Google OAuth', cue: 'Connect YouTube with read-only OAuth' },
-  { from: 780, label: 'Loading channels', cue: 'Subscribed channels load from YouTube' },
-  { from: 990, label: 'Channel view', cue: 'Select a channel and review recent videos' },
-  { from: 1230, label: 'Refresh index', cue: 'Build the saved recent-upload index' },
-  { from: 1470, label: 'Local search', cue: 'Search the saved ChannelCue index' },
-  { from: 1710, label: 'YouTube links', cue: 'Open source videos and channels on YouTube' },
-  { from: 1890, label: 'FAQ', cue: 'Explain quota-friendly API usage' },
-  { from: 2160, label: 'User controls', cue: 'Disconnect or log out any time' }
+  { from: 540, label: 'Start OAuth', cue: 'Click Connect YouTube' },
+  { from: 690, label: 'Google account', cue: 'Choose a Google account' },
+  { from: 840, label: 'Verification notice', cue: 'Continue through app review notice' },
+  { from: 990, label: 'OAuth consent', cue: 'Review YouTube read-only consent' },
+  { from: 1170, label: 'Grant access', cue: 'Allow the requested read-only scope' },
+  { from: 1320, label: 'Loading channels', cue: 'Subscribed channels load from YouTube' },
+  { from: 1530, label: 'Channel view', cue: 'Select a channel and review recent videos' },
+  { from: 1770, label: 'Refresh index', cue: 'Build the saved recent-upload index' },
+  { from: 2010, label: 'Local search', cue: 'Search the saved ChannelCue index' },
+  { from: 2250, label: 'YouTube links', cue: 'Open source videos and channels on YouTube' },
+  { from: 2430, label: 'FAQ', cue: 'Explain quota-friendly API usage' },
+  { from: 2700, label: 'User controls', cue: 'Disconnect or log out any time' }
 ];
 
 const narration = [
@@ -49,27 +53,32 @@ const narration = [
       'The user first signs in to ChannelCue, then connects their Google and YouTube account using OAuth. The app requests read-only YouTube access.'
   },
   {
-    from: 690,
+    from: 990,
+    text:
+      'The OAuth consent flow shows the Google account, the ChannelCue app name, and the requested permission: View your YouTube account.'
+  },
+  {
+    from: 1260,
     text:
       'It uses subscriptions.list to retrieve subscribed channels, channels.list to retrieve channel metadata and uploads playlist IDs, playlistItems.list to retrieve recent uploads, and videos.list to retrieve video metadata and statistics.'
   },
   {
-    from: 1110,
+    from: 1650,
     text:
       'ChannelCue displays the user subscribed channels, basic channel information, and recent videos. The app stores this metadata in a private user index.'
   },
   {
-    from: 1500,
+    from: 2040,
     text:
       'Searches are performed locally inside ChannelCue against the saved index, instead of repeatedly calling YouTube search APIs.'
   },
   {
-    from: 1905,
+    from: 2445,
     text:
       'The user can manually refresh the index when they want newer uploads, disconnect their YouTube account, or log out.'
   },
   {
-    from: 2220,
+    from: 2760,
     text: 'ChannelCue does not modify YouTube content or user account data.'
   }
 ];
@@ -323,29 +332,200 @@ const ConfigScreen: React.FC = () => (
   </div>
 );
 
-const OAuthScreen: React.FC = () => (
-  <div style={{ display: 'grid', placeItems: 'center', height: '100%', background: '#f7f9fb' }}>
-    <div style={{ width: 590, padding: 38, background: '#ffffff', borderRadius: 10, border: `1px solid ${colors.line}` }}>
-      <div style={{ fontSize: 30, fontWeight: 800 }}>Sign in with Google</div>
-      <p style={{ color: colors.muted, fontSize: 21 }}>ChannelCue wants read-only access to your YouTube account.</p>
-      <div style={{ display: 'grid', gap: 12, marginTop: 24 }}>
-        {['See your YouTube account', 'View your YouTube subscriptions', 'Read channel and video metadata'].map((item) => (
-          <div key={item} style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 21 }}>
-            <span style={{ color: colors.teal, fontWeight: 900 }}>✓</span>
-            {item}
-          </div>
-        ))}
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 34 }}>
-        <Button>Cancel</Button>
-        <Button primary>Allow</Button>
+const ConnectYouTubeScreen: React.FC = () => (
+  <div style={{ padding: 36 }}>
+    <HeaderBar />
+    <div style={{ marginTop: 48, padding: 32, borderRadius: 12, border: `2px solid ${colors.line}`, background: colors.paper }}>
+      <h2 style={{ margin: 0, fontSize: 38 }}>Connect YouTube</h2>
+      <p style={{ color: colors.muted, fontSize: 23, lineHeight: 1.35, maxWidth: 760 }}>
+        ChannelCue is signed in. The next step opens Google OAuth so the user can grant read-only YouTube access.
+      </p>
+      <div style={{ display: 'flex', gap: 16, marginTop: 26 }}>
+        <Button primary>Connect YouTube</Button>
+        <Button>Configuration</Button>
       </div>
     </div>
   </div>
 );
 
+const GoogleShell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div style={{ height: '100%', background: '#f8fafd', padding: 52, fontFamily: 'Arial, sans-serif' }}>
+    <div style={{ position: 'absolute', left: 52, top: 34, display: 'flex', alignItems: 'center', gap: 12 }}>
+      <span style={{ color: '#4285f4', fontSize: 30, fontWeight: 800 }}>G</span>
+      <span style={{ color: '#5f6368', fontSize: 20 }}>Google Accounts</span>
+    </div>
+    {children}
+  </div>
+);
+
+const GoogleCard: React.FC<{ children: React.ReactNode; wide?: boolean }> = ({ children, wide }) => (
+  <div
+    style={{
+      width: wide ? 760 : 600,
+      minHeight: wide ? 470 : 430,
+      margin: '58px auto 0',
+      borderRadius: 24,
+      border: '1px solid #dadce0',
+      background: '#ffffff',
+      padding: 40,
+      color: '#202124'
+    }}
+  >
+    {children}
+  </div>
+);
+
+const AccountChooserScreen: React.FC = () => (
+  <GoogleShell>
+    <GoogleCard>
+      <div style={{ fontSize: 36, lineHeight: 1.15 }}>Choose an account</div>
+      <div style={{ marginTop: 8, color: '#5f6368', fontSize: 19 }}>to continue to ChannelCue</div>
+      <div style={{ marginTop: 34, borderTop: '1px solid #e0e0e0' }}>
+        {[
+          ['Demo Reviewer', 'reviewer@example.com'],
+          ['Use another account', 'Sign in with a different Google account']
+        ].map(([name, email], index) => (
+          <div
+            key={name}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '54px 1fr',
+              gap: 16,
+              alignItems: 'center',
+              padding: '18px 0',
+              borderBottom: '1px solid #e0e0e0'
+            }}
+          >
+            <div
+              style={{
+                width: 46,
+                height: 46,
+                borderRadius: 99,
+                background: index === 0 ? '#1a73e8' : '#f1f3f4',
+                color: index === 0 ? '#fff' : '#5f6368',
+                display: 'grid',
+                placeItems: 'center',
+                fontSize: 21,
+                fontWeight: 700
+              }}
+            >
+              {index === 0 ? 'D' : '+'}
+            </div>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>{name}</div>
+              <div style={{ marginTop: 3, fontSize: 17, color: '#5f6368' }}>{email}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </GoogleCard>
+  </GoogleShell>
+);
+
+const VerificationNoticeScreen: React.FC = () => (
+  <GoogleShell>
+    <GoogleCard wide>
+      <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr', gap: 22 }}>
+        <div
+          style={{
+            width: 52,
+            height: 52,
+            borderRadius: 99,
+            border: '3px solid #fbbc04',
+            color: '#fbbc04',
+            display: 'grid',
+            placeItems: 'center',
+            fontSize: 28,
+            fontWeight: 900
+          }}
+        >
+          !
+        </div>
+        <div>
+          <div style={{ fontSize: 35, lineHeight: 1.14 }}>Google has not verified this app</div>
+          <p style={{ color: '#5f6368', fontSize: 19, lineHeight: 1.45 }}>
+            The app is requesting access to sensitive info in your Google Account. Until the developer verifies this app
+            with Google, you should not use it.
+          </p>
+          <div style={{ marginTop: 24, fontSize: 18, color: '#1a73e8', fontWeight: 700 }}>
+            Advanced
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 18, marginTop: 34 }}>
+            <div style={{ color: '#1a73e8', fontSize: 18, fontWeight: 700, padding: '12px 14px' }}>Back to safety</div>
+            <div
+              style={{
+                background: '#1a73e8',
+                color: '#ffffff',
+                borderRadius: 20,
+                padding: '12px 22px',
+                fontSize: 18,
+                fontWeight: 700
+              }}
+            >
+              Continue
+            </div>
+          </div>
+        </div>
+      </div>
+    </GoogleCard>
+  </GoogleShell>
+);
+
+const ConsentScreen: React.FC<{ allowed?: boolean }> = ({ allowed }) => (
+  <GoogleShell>
+    <GoogleCard wide>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 270px', gap: 32 }}>
+        <div>
+          <div style={{ fontSize: 34, lineHeight: 1.16 }}>ChannelCue wants access to your Google Account</div>
+          <div style={{ marginTop: 14, color: '#5f6368', fontSize: 19 }}>reviewer@example.com</div>
+          <p style={{ color: '#3c4043', fontSize: 19, lineHeight: 1.42, marginTop: 28 }}>
+            This lets ChannelCue use YouTube API Services to build your private subscribed-channel index.
+          </p>
+          <div style={{ marginTop: 24, border: '1px solid #dadce0', borderRadius: 12, padding: 18 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 14 }}>ChannelCue will be able to:</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '34px 1fr', gap: 12, alignItems: 'center' }}>
+              <div style={{ color: '#d93025', fontSize: 25 }}>▶</div>
+              <div>
+                <div style={{ fontSize: 20, fontWeight: 700 }}>View your YouTube account</div>
+                <div style={{ color: '#5f6368', fontSize: 16, marginTop: 4 }}>
+                  Read-only access. ChannelCue cannot upload, edit, delete, comment, or subscribe.
+                </div>
+              </div>
+            </div>
+          </div>
+          {allowed && (
+            <div style={{ marginTop: 18, color: '#137333', fontSize: 19, fontWeight: 700 }}>
+              Access granted. Returning to ChannelCue...
+            </div>
+          )}
+        </div>
+        <div style={{ borderLeft: '1px solid #e0e0e0', paddingLeft: 26 }}>
+          <Img src={staticFile('assets/channelcue-icon.svg')} style={{ width: 74, height: 74 }} />
+          <div style={{ marginTop: 14, fontSize: 22, fontWeight: 700 }}>ChannelCue</div>
+          <div style={{ marginTop: 8, color: '#5f6368', fontSize: 16 }}>channelcue.com</div>
+          <div style={{ marginTop: 34, display: 'flex', justifyContent: 'flex-end', gap: 14 }}>
+            <div style={{ color: '#1a73e8', fontSize: 17, fontWeight: 700, padding: '11px 12px' }}>Cancel</div>
+            <div
+              style={{
+                background: allowed ? '#137333' : '#1a73e8',
+                color: '#ffffff',
+                borderRadius: 20,
+                padding: '11px 22px',
+                fontSize: 17,
+                fontWeight: 700
+              }}
+            >
+              {allowed ? 'Allowed' : 'Allow'}
+            </div>
+          </div>
+        </div>
+      </div>
+    </GoogleCard>
+  </GoogleShell>
+);
+
 const LoadingScreen: React.FC<{ frame: number }> = ({ frame }) => {
-  const count = Math.floor(interpolate(frame, [780, 960], [0, 966], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }));
+  const count = Math.floor(interpolate(frame, [1320, 1500], [0, 966], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }));
   return (
     <div style={{ padding: 36 }}>
       <HeaderBar />
@@ -354,7 +534,7 @@ const LoadingScreen: React.FC<{ frame: number }> = ({ frame }) => {
         <p style={{ margin: '10px 0 0', color: colors.muted, fontSize: 22 }}>
           Found {count.toLocaleString()} subscribed channels using subscriptions.list.
         </p>
-        <Progress amount={interpolate(frame, [800, 960], [0.12, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })} />
+        <Progress amount={interpolate(frame, [1340, 1500], [0.12, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })} />
       </div>
       <EndpointFlow active={0} />
     </div>
@@ -491,7 +671,7 @@ const VideosPanel: React.FC<{ frame: number; mode: string }> = ({ frame, mode })
       {refreshing && (
         <div style={{ padding: 20, marginBottom: 16, borderRadius: 10, background: colors.softTeal, border: '2px solid #b8dcd8' }}>
           <div style={{ fontSize: 20, fontWeight: 900 }}>Refreshing saved index</div>
-          <Progress amount={interpolate(frame, [1230, 1440], [0.08, 0.92], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })} />
+          <Progress amount={interpolate(frame, [1770, 1980], [0.08, 0.92], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })} />
         </div>
       )}
       <div style={{ padding: 22, borderRadius: 12, border: `2px solid ${colors.line}`, background: colors.paper }}>
@@ -554,6 +734,11 @@ const Cursor: React.FC<{ frame: number }> = ({ frame }) => {
     [820, 810],
     [1180, 725],
     [1030, 210],
+    [1160, 230],
+    [575, 360],
+    [1035, 560],
+    [1025, 735],
+    [1038, 735],
     [960, 702],
     [1120, 736],
     [935, 294],
@@ -662,14 +847,18 @@ const MainScreen: React.FC<{ frame: number }> = ({ frame }) => {
       {active === 0 && <LandingScreen frame={frame} />}
       {active === 1 && <SignInScreen />}
       {active === 2 && <ConfigScreen />}
-      {active === 3 && <OAuthScreen />}
-      {active === 4 && <LoadingScreen frame={frame} />}
-      {active === 5 && <AppScreen frame={frame} mode="channel" />}
-      {active === 6 && <AppScreen frame={frame} mode="refresh" />}
-      {active === 7 && <AppScreen frame={frame} mode="search" />}
-      {active === 8 && <AppScreen frame={frame} mode="links" />}
-      {active === 9 && <AppScreen frame={frame} mode="faq" />}
-      {active === 10 && <AppScreen frame={frame} mode="controls" />}
+      {active === 3 && <ConnectYouTubeScreen />}
+      {active === 4 && <AccountChooserScreen />}
+      {active === 5 && <VerificationNoticeScreen />}
+      {active === 6 && <ConsentScreen />}
+      {active === 7 && <ConsentScreen allowed />}
+      {active === 8 && <LoadingScreen frame={frame} />}
+      {active === 9 && <AppScreen frame={frame} mode="channel" />}
+      {active === 10 && <AppScreen frame={frame} mode="refresh" />}
+      {active === 11 && <AppScreen frame={frame} mode="search" />}
+      {active === 12 && <AppScreen frame={frame} mode="links" />}
+      {active === 13 && <AppScreen frame={frame} mode="faq" />}
+      {active === 14 && <AppScreen frame={frame} mode="controls" />}
     </div>
   );
 };
@@ -690,7 +879,7 @@ export const ChannelCueApiScreencast: React.FC = () => {
             'radial-gradient(circle at 15% 15%, rgba(19,122,127,0.13), transparent 34%), radial-gradient(circle at 78% 78%, rgba(197,138,29,0.14), transparent 36%)'
         }}
       />
-      <BrowserFrame url={frame < 570 ? 'channelcue.com' : frame < 780 ? 'accounts.google.com/oauth' : 'channelcue.com'}>
+      <BrowserFrame url={frame < 690 ? 'channelcue.com' : frame < 1320 ? 'accounts.google.com/o/oauth2/v2/auth' : 'channelcue.com'}>
         <MainScreen frame={frame} />
       </BrowserFrame>
       <Sidebar frame={frame} />
@@ -718,7 +907,7 @@ export const ChannelCueApiScreencast: React.FC = () => {
           fontWeight: 800
         }}
       >
-        {Math.floor(frame / fps)}s / {Math.floor(2400 / fps)}s
+        {Math.floor(frame / fps)}s / {Math.floor(2940 / fps)}s
       </div>
     </AbsoluteFill>
   );

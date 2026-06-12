@@ -17,7 +17,7 @@ export const Root: React.FC = () => {
       <Composition
         id="ChannelCueApiScreencast"
         component={ChannelCueApiScreencast}
-        durationInFrames={2400}
+        durationInFrames={2940}
         fps={30}
         width={1920}
         height={1080}
