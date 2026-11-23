@@ -204,5 +204,680 @@ function renderPaymentLink(url) {
     els.heroPayButton.setAttribute('aria-disabled', 'true');
     els.heroPayButton.textContent = 'Payment link coming soon';
     els.accountPayLink.href = '#';
-    els.accountPayLink.setAttribute('aria-disabled', 'tr
-[truncated — file has 33590 chars total; use start_line/end_line to read more]
+    els.accountPayLink.setAttribute('aria-disabled', 'true');
+    els.accountPayLink.textContent = 'Payment link coming soon';
+    return;
+  }
+
+  els.heroPayButton.href = url;
+  els.heroPayButton.removeAttribute('aria-disabled');
+  els.heroPayButton.textContent = 'Pay Now';
+  els.accountPayLink.href = url;
+  els.accountPayLink.removeAttribute('aria-disabled');
+  els.accountPayLink.textContent = 'Pay Now';
+}
+
+function activateConfigTab(tabName) {
+  const showGoogle = tabName === 'google';
+  els.googleTab.classList.toggle('active', showGoogle);
+  els.billingTab.classList.toggle('active', !showGoogle);
+  els.googlePane.classList.toggle('hidden', !showGoogle);
+  els.billingPane.classList.toggle('hidden', showGoogle);
+}
+
+function setSharedGoogleKeySelection(isSelected) {
+  state.useSharedGoogleKey = isSelected;
+  els.clientIdInput.readOnly = isSelected;
+  els.clientSecretInput.readOnly = isSelected;
+  els.clientIdInput.dataset.sharedKey = isSelected ? 'true' : 'false';
+  els.clientSecretInput.dataset.sharedKey = isSelected ? 'true' : 'false';
+
+  if (isSelected) {
+    els.clientIdInput.value = SHARED_CLIENT_ID_MASK;
+    els.clientSecretInput.value = SHARED_CLIENT_SECRET_MASK;
+    els.clientSecretInput.placeholder = '';
+    return;
+  }
+
+  if (els.clientIdInput.value === SHARED_CLIENT_ID_MASK) {
+    els.clientIdInput.value = '';
+  }
+  if (els.clientSecretInput.value === SHARED_CLIENT_SECRET_MASK) {
+    els.clientSecretInput.value = '';
+  }
+}
+
+function showConfiguration(tabName = 'billing') {
+  if (!state.signedIn) {
+    showNotice('Sign in to ChannelCue before opening Configuration.');
+    if (state.clerkConfigured) els.authButton.click();
+    return;
+  }
+
+  els.faqPanel.classList.add('hidden');
+  els.setupPanel.classList.remove('hidden');
+  activateConfigTab(tabName);
+  loadGoogleConfig();
+}
+
+function showFaq() {
+  if (!state.signedIn) {
+    showNotice('Sign in to ChannelCue before opening Frequently Asked Questions.');
+    if (state.clerkConfigured) els.authButton.click();
+    return;
+  }
+
+  els.setupPanel.classList.add('hidden');
+  els.faqPanel.classList.remove('hidden');
+}
+
+function renderHeroState(config = {}) {
+  els.hero.classList.toggle('hidden', state.signedIn);
+  els.heroConfigButton.classList.toggle('hidden', !state.signedIn);
+  renderAccountBanner(config);
+  const trial = config.defaultGoogleTrial;
+  const expired = Boolean(trial?.expired && !config.personalConfigured && config.access?.accessOverride !== 'comped');
+  els.heroPayButton.classList.toggle('hidden', !expired);
+  els.heroStartButton.classList.toggle('hidden', expired);
+  els.postTrialThanks.classList.toggle('hidden', !expired);
+
+  if (expired) {
+    els.heroMessage.textContent =
+      'Thanks for using ChannelCue Pro. Tell your friends, then add your own Google keys or renew for $36/year.';
+    activateConfigTab('google');
+    return;
+  }
+
+  if (config.usingDefaultGoogleConfig && trial?.active) {
+    els.heroMessage.textContent = `Trial active: ${trial.daysRemaining} day${trial.daysRemaining === 1 ? '' : 's'} left. All updates included with Pro.`;
+    return;
+  }
+
+  els.heroMessage.textContent = '7 days free, then $36/year with all updates included.';
+}
+
+function renderAccountBanner(config = {}) {
+  const trial = config.defaultGoogleTrial;
+  const expired = Boolean(trial?.expired && !config.personalConfigured && config.access?.accessOverride !== 'comped');
+  const needsIndex = Boolean(config.needsIndex);
+  const showBanner = state.signedIn && (!state.connected || expired || needsIndex);
+  els.accountBanner.classList.toggle('hidden', !showBanner);
+  if (!showBanner) return;
+
+  els.accountPayLink.classList.toggle('hidden', !expired);
+  els.accountConnectButton.classList.toggle('hidden', expired || state.connected);
+  els.accountIndexButton.classList.toggle('hidden', !state.connected || expired);
+
+  if (expired) {
+    els.accountBannerTitle.textContent = 'Thanks for using ChannelCue Pro';
+    els.accountBannerMessage.textContent =
+      'Your 7-day trial has ended. Tell your friends if ChannelCue helped, then pay now or add your own Google keys in Configuration.';
+    return;
+  }
+
+  if (!state.connected) {
+    if (!state.googleConfigured) {
+      els.accountConnectButton.textContent = 'Choose Google key';
+      els.accountBannerTitle.textContent = 'Next step: choose Google access';
+      els.accountBannerMessage.textContent = config.access?.accessOverride === 'comped'
+        ? 'Your complimentary ChannelCue access is active. Add your Google client ID and secret in Configuration to connect YouTube.'
+        : 'ChannelCue login is complete. Start the 7-day trial, or add your own Google client ID and secret.';
+      return;
+    }
+
+    els.accountConnectButton.textContent = 'Connect YouTube';
+    els.accountBannerTitle.textContent = 'Next step: connect YouTube';
+    els.accountBannerMessage.textContent =
+      'ChannelCue login is complete. Now connect YouTube so we can load your subscriptions and build your private channel briefings.';
+    return;
+  }
+
+  els.accountIndexButton.classList.remove('hidden');
+  els.accountConnectButton.classList.add('hidden');
+  els.accountBannerTitle.textContent = 'Channels loaded';
+  els.accountBannerMessage.textContent =
+    'Go ahead and click Refresh index once. We will show progress while ChannelCue gathers recent uploads.';
+}
+
+function renderTrial(config) {
+  const trial = config?.defaultGoogleTrial;
+  const access = config?.access || trial || {};
+  const comped = access.accessOverride === 'comped';
+  els.billingTab.textContent = comped ? 'Access' : 'Trial';
+  els.billingDescription.textContent = comped
+    ? 'Your complimentary ChannelCue access is active.'
+    : 'Start with a 7-day trial using the shared key. After that, ChannelCue Pro is $36/year with every update included.';
+  els.googleDescription.textContent = comped
+    ? 'Your complimentary access is active. You can create your own Google OAuth web client and save its client ID and secret here, or return to update these values at any time.'
+    : 'After the trial, activate your ChannelCue subscription, then create your own Google OAuth web client and save its client ID and secret here. You can return to Configuration any time to replace or update these values.';
+  els.trialHeading.textContent = comped ? 'Complimentary access' : 'Start your 7-day trial';
+  els.pricingNote.classList.toggle('hidden', comped);
+  renderHeroState(config);
+  els.trialPanel.classList.toggle('hidden', !trial?.available);
+  if (!trial?.available) return;
+
+  if (access.accessOverride === 'comped') {
+    const canUseDefaultGoogle = Boolean(access.defaultGoogleAccess);
+    els.trialStatus.textContent = canUseDefaultGoogle
+      ? 'ChannelCue access active. This account is comped and allowed to use the ChannelCue default Google credentials.'
+      : 'ChannelCue access active. This account is comped; save personal Google credentials below to connect YouTube.';
+    els.useDefaultKeyButton.textContent = canUseDefaultGoogle ? 'Default access active' : 'Comped access active';
+    els.useDefaultKeyButton.disabled = true;
+    return;
+  }
+
+  if (config.usingDefaultGoogleConfig && trial.active) {
+    els.trialStatus.textContent = `7-day trial active. ${trial.daysRemaining} day${trial.daysRemaining === 1 ? '' : 's'} remaining. Your Google access is ready for this trial.`;
+    els.useDefaultKeyButton.textContent = 'Trial active';
+    els.useDefaultKeyButton.disabled = true;
+    return;
+  }
+
+  if (trial.expired) {
+    els.trialStatus.textContent = `Your 7-day trial ended. Activate your ChannelCue subscription, then add your own Google credentials to continue. Continued access is $${config.annualPriceUsd || 36}/year.`;
+    els.useDefaultKeyButton.textContent = 'Trial ended';
+    els.useDefaultKeyButton.disabled = true;
+    renderHeroState(config);
+    return;
+  }
+
+  if (state.useSharedGoogleKey) {
+    els.trialStatus.textContent =
+      '7-day trial selected. The trial client ID and secret are masked here and stay private on the server. Click Save configuration to start your trial.';
+    els.useDefaultKeyButton.textContent = 'Trial selected';
+    els.useDefaultKeyButton.disabled = true;
+  } else {
+    els.trialStatus.textContent = `Start with ChannelCue trial access for ${trial.daysRemaining || 7} days. The trial client ID and secret stay private on the server. Click Start 7-day trial, then save to begin.`;
+    els.useDefaultKeyButton.textContent = 'Start 7-day trial';
+    els.useDefaultKeyButton.disabled = false;
+  }
+  renderHeroState(config);
+}
+
+function renderIndexStatus(status) {
+  if (!status || !status.refreshedAt) {
+    els.indexStatus.textContent = 'No cached videos yet. Refresh the index before searching.';
+    return;
+  }
+
+  const refreshed = formatDate(status.refreshedAt);
+  const stale = status.stale ? 'Needs refresh' : 'Fresh';
+  els.indexStatus.textContent = `${stale}: ${status.videoCount} videos from ${status.channelCount} channels, refreshed ${refreshed}.`;
+}
+
+function renderSubscriptions() {
+  els.channelSelect.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = state.subscriptions.length ? 'Choose a subscribed channel' : 'No channels loaded';
+  els.channelSelect.appendChild(placeholder);
+
+  for (const channel of state.subscriptions) {
+    const option = document.createElement('option');
+    option.value = channel.id;
+    option.textContent = channel.title;
+    els.channelSelect.appendChild(option);
+  }
+}
+
+function renderChannel(channel) {
+  els.channelEmpty.classList.add('hidden');
+  els.channelDetails.classList.remove('hidden');
+  const channelUrl = channel.url || `https://www.youtube.com/channel/${channel.id}`;
+  els.channelDetails.innerHTML = `
+    <article class="channel-card">
+      <div class="channel-head">
+        <img src="${channel.thumbnail || ''}" alt="" />
+        <div>
+          <h3>${escapeHtml(channel.title)}</h3>
+          <a href="${channelUrl}" target="_blank" rel="noreferrer">Open channel</a>
+        </div>
+      </div>
+      <p class="channel-description">${escapeHtml(channel.description || 'No channel description available.')}</p>
+      <div class="stats">
+        <div class="stat"><strong>${compactNumber(channel.subscriberCount)}</strong><span>subscribers</span></div>
+        <div class="stat"><strong>${compactNumber(channel.videoCount)}</strong><span>videos</span></div>
+        <div class="stat"><strong>${compactNumber(channel.viewCount)}</strong><span>views</span></div>
+      </div>
+    </article>
+  `;
+}
+
+function renderVideos(target, videos) {
+  if (!videos.length) {
+    target.innerHTML = '<div class="empty">No videos found.</div>';
+    return;
+  }
+
+[system] You have made 15 tool calls since you last updated your plan, and the user follows your progress through it. If you have finished the in_progress step (or moved past it), call update_todos now: mark finished steps completed and the current one in_progress. If you are still on the same step, carry on.
+
+  target.innerHTML = videos
+    .map(video => {
+      return `
+        <article class="video-card">
+          <a href="${video.url}" target="_blank" rel="noreferrer">
+            <img src="${video.thumbnail || ''}" alt="" />
+          </a>
+          <div class="video-body">
+            <h3><a href="${video.url}" target="_blank" rel="noreferrer">${escapeHtml(video.title)}</a></h3>
+            <p class="summary">${escapeHtml(video.summary)}</p>
+            <div class="meta">
+              <span class="pill">${escapeHtml(video.channelTitle || 'Channel')}</span>
+              <span>${formatDate(video.publishedAt)}</span>
+              ${video.duration ? `<span>${escapeHtml(video.duration)}</span>` : ''}
+              ${video.viewCount ? `<span>${compactNumber(video.viewCount)} views</span>` : ''}
+              <a href="${video.url}" target="_blank" rel="noreferrer">Open video</a>
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join('');
+}
+
+async function loadGoogleConfig() {
+  if (!state.signedIn) return;
+
+  try {
+    const config = await api('/api/config/google');
+    const usingSharedKey = Boolean(config.usingDefaultGoogleConfig && config.defaultGoogleTrial?.active);
+    setSharedGoogleKeySelection(usingSharedKey);
+    if (!usingSharedKey) {
+      els.clientIdInput.value = config.clientId || '';
+      els.clientSecretInput.value = '';
+    }
+    els.clientSecretInput.placeholder = !usingSharedKey && config.hasClientSecret
+      ? 'Saved. Enter a new secret to replace it.'
+      : '';
+    if (config.redirectUri) els.redirectUri.textContent = config.redirectUri;
+    renderTrial(config);
+    renderPaymentLink(config.paymentLinkUrl);
+  } catch (error) {
+    if (state.signedIn) handleAppError(error);
+  }
+}
+
+async function loadSubscriptions() {
+  showNotice('');
+  showNotice('Loading your YouTube subscriptions. This can take a moment if you follow a lot of channels.');
+  setLoading(els.videoList, 'Loading your YouTube subscriptions...');
+  els.indexStatus.textContent = 'Loading channels from YouTube...';
+  try {
+    const data = await api('/api/subscriptions');
+    state.subscriptions = data.subscriptions;
+    state.cachedVideos = [];
+    state.cachedIndexLoaded = false;
+    renderSubscriptions();
+    await loadIndexStatus();
+    if (state.subscriptions[0]) {
+      els.channelSelect.value = state.subscriptions[0].id;
+      await loadChannel(state.subscriptions[0].id);
+    }
+    showNotice(`Loaded ${state.subscriptions.length} subscribed channels. Click Refresh index once to make search useful.`);
+    renderAccountBanner({ configured: state.googleConfigured, needsIndex: true });
+  } catch (error) {
+    setLoading(els.videoList, 'Could not load YouTube subscriptions.');
+    handleAppError(error);
+  }
+}
+
+async function loadCachedIndex() {
+  try {
+    const index = await api('/api/index/library');
+    renderIndexStatus(index);
+    if (!index.channels?.length || !index.videos?.length) {
+      state.cachedVideos = [];
+      state.cachedIndexLoaded = false;
+      return false;
+    }
+
+    state.subscriptions = index.channels;
+    state.cachedVideos = index.videos;
+    state.cachedIndexLoaded = true;
+    renderSubscriptions();
+    if (state.subscriptions[0]) {
+      els.channelSelect.value = state.subscriptions[0].id;
+      renderCachedChannel(state.subscriptions[0].id);
+    }
+    showNotice(`Loaded saved index with ${index.videoCount} videos from ${index.channelCount} channels. Refresh only when you want newer uploads.`);
+    renderAccountBanner({ configured: state.googleConfigured, needsIndex: false });
+    return true;
+  } catch (error) {
+    if (state.signedIn) handleAppError(error);
+    return false;
+  }
+}
+
+async function loadIndexStatus() {
+  try {
+    const status = await api('/api/index/status');
+    renderIndexStatus(status);
+  } catch {
+    renderIndexStatus(null);
+  }
+}
+
+async function refreshIndex() {
+  els.refreshIndexButton.disabled = true;
+  els.accountIndexButton.disabled = true;
+  els.refreshIndexButton.textContent = 'Refreshing...';
+  els.accountIndexButton.textContent = 'Indexing...';
+  els.indexStatus.textContent = 'Fetching recent uploads from subscribed channels...';
+  try {
+    let status;
+    do {
+      status = await api('/api/index/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      if (status.busy) {
+        throw new Error('An index request is already running. Wait for it to finish, then click Refresh index to resume if needed.');
+      } else if (!status.complete) {
+        els.indexStatus.textContent = `Indexed ${status.channelCount} channels and ${status.videoCount} videos so far. Your existing index remains available.`;
+      }
+    } while (!status.complete);
+    renderIndexStatus(status);
+    await loadCachedIndex();
+    showNotice(
+      status.warning ||
+        `Search index refreshed with ${status.videoCount} videos from ${status.channelCount} channels.`
+    );
+  } catch (error) {
+    els.indexStatus.textContent = 'Indexing paused. Click Refresh index to resume; the previous index remains available.';
+    handleAppError(error);
+  } finally {
+    els.refreshIndexButton.disabled = false;
+    els.accountIndexButton.disabled = false;
+    els.refreshIndexButton.textContent = 'Refresh index';
+    els.accountIndexButton.textContent = 'Refresh index';
+  }
+}
+
+function renderCachedChannel(channelId) {
+  const channel = state.subscriptions.find(item => item.id === channelId);
+  if (!channel) return;
+  const videos = state.cachedVideos
+    .filter(video => video.channelId === channelId)
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+    .slice(0, 8);
+  renderChannel(channel);
+  renderVideos(els.videoList, videos);
+  els.latestMeta.textContent = `${videos.length} cached videos`;
+}
+
+async function loadChannel(channelId) {
+  if (!channelId) return;
+  if (state.cachedIndexLoaded && state.cachedVideos.length) {
+    renderCachedChannel(channelId);
+    return;
+  }
+
+  setLoading(els.videoList, 'Fetching latest uploads...');
+  els.latestMeta.textContent = '';
+  const data = await api(`/api/channels/${encodeURIComponent(channelId)}/latest`);
+  renderChannel(data.channel);
+  renderVideos(els.videoList, data.videos);
+  els.latestMeta.textContent = `${data.videos.length} videos`;
+}
+
+async function searchTopics(query) {
+  setSearchBusy(true, 'Searching the cached video index...');
+  setLoading(els.searchResults, 'Searching cached videos...');
+  els.searchMeta.textContent = '';
+  try {
+    const data = await api(`/api/search?q=${encodeURIComponent(query)}`);
+    renderVideos(els.searchResults, data.results);
+    const scope =
+      data.totalChannels && data.searchedChannels < data.totalChannels
+        ? `${data.searchedChannels} of ${data.totalChannels} channels`
+        : `${data.searchedChannels} channels`;
+    els.searchMeta.textContent = `${data.results.length} matches across ${scope}`;
+    if (data.indexVideoCount) {
+      els.searchMeta.textContent += `, ${data.indexVideoCount} cached videos`;
+    }
+    const completion =
+      data.results.length > 0
+        ? `Search complete for "${query}".`
+        : `Search complete for "${query}". No matches found in ${data.indexVideoCount || 0} cached videos.`;
+    setSearchBusy(false, completion);
+  } catch (error) {
+    renderVideos(els.searchResults, []);
+    els.searchMeta.textContent = 'Search failed';
+    setSearchBusy(false, `Search failed: ${error.message}`);
+    handleAppError(error);
+  }
+}
+
+async function setupClerk(status) {
+  if (!status.clerkConfigured || !status.clerkPublishableKey) return;
+
+  const frontendApi = getClerkFrontendApi(status.clerkPublishableKey);
+  if (!frontendApi) {
+    throw new Error('Clerk publishable key is not valid.');
+  }
+
+  window.__clerk_publishable_key = status.clerkPublishableKey;
+  await new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = `https://${frontendApi}/npm/@clerk/clerk-js@5/dist/clerk.browser.js`;
+    script.setAttribute('data-clerk-publishable-key', status.clerkPublishableKey);
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+
+  if (window.Clerk?.load) {
+    await window.Clerk.load();
+  }
+}
+
+function getClerkFrontendApi(publishableKey) {
+  const encoded = publishableKey.split('_')[2];
+  if (!encoded) return '';
+  const padded = encoded.padEnd(encoded.length + ((4 - (encoded.length % 4)) % 4), '=');
+  try {
+    return atob(padded).replace(/\$$/, '');
+  } catch {
+    return '';
+  }
+}
+
+function setupHeroVideoFade() {
+  if (!els.heroVideo) return;
+
+  const updateVideoVisibility = () => {
+    const duration = els.heroVideo.duration || 18;
+    const fadeAt = Math.max(0, duration - 7.7);
+    const isFinale = els.heroVideo.currentTime >= fadeAt;
+    els.heroVideo.classList.toggle('fade-away', false);
+    els.hero.classList.toggle('video-finale', isFinale);
+  };
+
+  els.heroVideo.addEventListener('timeupdate', updateVideoVisibility);
+  els.heroVideo.addEventListener('seeked', updateVideoVisibility);
+  els.heroVideo.addEventListener('play', updateVideoVisibility);
+  els.heroVideo.addEventListener('loadedmetadata', updateVideoVisibility);
+}
+
+async function init() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('error') === 'missing-google-config') {
+    showNotice('Google OAuth is not configured. Open Configuration and save your Google credentials.');
+  }
+
+  try {
+    const status = await api('/api/auth/status');
+    state.connected = status.connected;
+    state.clerkConfigured = status.clerkConfigured;
+    state.signedIn = status.signedIn;
+    if (status.redirectUri) els.redirectUri.textContent = status.redirectUri;
+    await setupClerk(status);
+    renderPaymentLink(status.paymentLinkUrl);
+    renderHeroState(status);
+    updateAuthUi(status.configured);
+    await loadGoogleConfig();
+    const hasCachedIndex = await loadCachedIndex();
+    if (!hasCachedIndex && state.connected) showNotice('Click Refresh index to build your searchable video index.');
+    if (!hasCachedIndex) await loadIndexStatus();
+  } catch (error) {
+    handleAppError(error);
+  }
+}
+
+els.connectButton.addEventListener('click', async () => {
+  try {
+    const status = await api('/api/auth/status');
+    state.signedIn = status.signedIn;
+    updateAuthUi(status.configured);
+    if (status.configured) {
+      showNotice('Opening Google so you can connect YouTube. When you return, ChannelCue will load your channels.');
+      window.location.href = '/auth/youtube';
+      return;
+    }
+    showConfiguration('google');
+    els.clientIdInput.focus();
+  } catch (error) {
+    handleAppError(error);
+  }
+});
+
+els.configButton.addEventListener('click', () => {
+  if (!els.setupPanel.classList.contains('hidden')) {
+    els.setupPanel.classList.add('hidden');
+    return;
+  }
+  showConfiguration('google');
+});
+
+els.faqButton.addEventListener('click', () => {
+  if (!els.faqPanel.classList.contains('hidden')) {
+    els.faqPanel.classList.add('hidden');
+    return;
+  }
+  showFaq();
+});
+
+els.heroConfigButton.addEventListener('click', () => {
+  showConfiguration('google');
+});
+
+els.heroStartButton.addEventListener('click', async () => {
+  if (!state.signedIn && state.clerkConfigured) {
+    await els.authButton.click();
+    return;
+  }
+  if (state.googleConfigured) {
+    window.location.href = '/auth/youtube';
+    return;
+  }
+  showConfiguration('billing');
+});
+
+els.accountConnectButton.addEventListener('click', () => {
+  els.connectButton.click();
+});
+
+els.accountIndexButton.addEventListener('click', () => {
+  refreshIndex();
+});
+
+els.billingTab.addEventListener('click', () => activateConfigTab('billing'));
+els.googleTab.addEventListener('click', () => activateConfigTab('google'));
+
+els.authButton.addEventListener('click', async () => {
+  if (!window.Clerk?.openSignIn) {
+    showNotice('Clerk is not ready. Check your Clerk publishable and secret keys, then refresh.');
+    return;
+  }
+  await window.Clerk.openSignIn();
+});
+
+els.useDefaultKeyButton.addEventListener('click', async () => {
+  setSharedGoogleKeySelection(true);
+  els.trialStatus.textContent =
+    '7-day trial selected. The trial client ID and secret are masked here and stay private on the server. Click Save configuration to start your trial.';
+  els.useDefaultKeyButton.textContent = 'Trial selected';
+  els.useDefaultKeyButton.disabled = true;
+  showNotice('7-day trial selected. Click Save configuration to start it.');
+});
+
+els.setupForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  try {
+    els.setupForm.querySelector('button[type="submit"]').disabled = true;
+    const data = state.useSharedGoogleKey
+      ? await api('/api/config/google/use-default', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        })
+      : await api('/api/config/google', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clientId: els.clientIdInput.value,
+            clientSecret: els.clientSecretInput.value
+          })
+        });
+    if (data.redirectUri) els.redirectUri.textContent = data.redirectUri;
+    updateAuthUi(true);
+    showNotice(
+      state.useSharedGoogleKey
+        ? 'Your 7-day trial has started. You can connect YouTube now.'
+        : 'Configuration saved. You can update these Google keys any time from Configuration.'
+    );
+    await loadGoogleConfig();
+  } catch (error) {
+    handleAppError(error);
+  } finally {
+    els.setupForm.querySelector('button[type="submit"]').disabled = false;
+  }
+});
+
+els.logoutButton.addEventListener('click', async () => {
+  await fetch('/auth/logout', { method: 'POST' });
+  state.connected = false;
+  state.subscriptions = [];
+  state.cachedVideos = [];
+  state.cachedIndexLoaded = false;
+  renderSubscriptions();
+  renderIndexStatus(null);
+  updateAuthUi(state.googleConfigured);
+  showNotice('Disconnected from YouTube.');
+});
+
+els.subBriefLogoutButton.addEventListener('click', async () => {
+  await fetch('/auth/logout', { method: 'POST' });
+  if (window.Clerk?.signOut) {
+    await window.Clerk.signOut();
+  }
+  state.connected = false;
+  state.signedIn = false;
+  state.subscriptions = [];
+  state.cachedVideos = [];
+  state.cachedIndexLoaded = false;
+  renderSubscriptions();
+  renderIndexStatus(null);
+  renderHeroState({});
+  updateAuthUi(false);
+  showNotice('Logged out of ChannelCue.');
+});
+
+els.refreshIndexButton.addEventListener('click', () => {
+  refreshIndex();
+});
+
+els.channelSelect.addEventListener('change', event => {
+  loadChannel(event.target.value).catch(handleAppError);
+});
+
+els.searchForm.addEventListener('submit', event => {
+  event.preventDefault();
+  const query = els.searchInput.value.trim();
+  if (!query) return;
+  searchTopics(query);
+});
+
+init();
+setupHeroVideoFade();
