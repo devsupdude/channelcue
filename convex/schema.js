@@ -23,6 +23,12 @@ export default defineSchema({
     expiresAt: v.number(),
     updatedAt: v.string()
   }).index("by_sid", ["sid"]),
+  indexJobs: defineTable({
+    userId: v.string(),
+    job: v.any(),
+    leaseUntil: v.number(),
+    leaseId: v.string()
+  }).index("by_user", ["userId"]),
   videoIndexes: defineTable({
     userId: v.string(),
     index: v.any(),
