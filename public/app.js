@@ -39,6 +39,10 @@ const els = {
   billingTab: document.querySelector('#billingTab'),
   googleTab: document.querySelector('#googleTab'),
   billingPane: document.querySelector('#billingPane'),
+  billingDescription: document.querySelector('#billingDescription'),
+  googleDescription: document.querySelector('#googleDescription'),
+  trialHeading: document.querySelector('#trialHeading'),
+  pricingNote: document.querySelector('#pricingNote'),
   googlePane: document.querySelector('#googlePane'),
   postTrialThanks: document.querySelector('#postTrialThanks'),
   redirectUri: document.querySelector('#redirectUri'),
@@ -315,8 +319,9 @@ function renderAccountBanner(config = {}) {
     if (!state.googleConfigured) {
       els.accountConnectButton.textContent = 'Choose Google key';
       els.accountBannerTitle.textContent = 'Next step: choose Google access';
-      els.accountBannerMessage.textContent =
-        'ChannelCue login is complete. Start the 7-day trial, or add your own Google client ID and secret.';
+      els.accountBannerMessage.textContent = config.access?.accessOverride === 'comped'
+        ? 'Your complimentary ChannelCue access is active. Add your Google client ID and secret in Configuration to connect YouTube.'
+        : 'ChannelCue login is complete. Start the 7-day trial, or add your own Google client ID and secret.';
       return;
     }
 
@@ -337,6 +342,17 @@ function renderAccountBanner(config = {}) {
 function renderTrial(config) {
   const trial = config?.defaultGoogleTrial;
   const access = config?.access || trial || {};
+  const comped = access.accessOverride === 'comped';
+  els.billingTab.textContent = comped ? 'Access' : 'Trial';
+  els.billingDescription.textContent = comped
+    ? 'Your complimentary ChannelCue access is active.'
+    : 'Start with a 7-day trial using the shared key. After that, ChannelCue Pro is $36/year with every update included.';
+  els.googleDescription.textContent = comped
+    ? 'Your complimentary access is active. You can create your own Google OAuth web client and save its client ID and secret here, or return to update these values at any time.'
+    : 'After the trial, activate your ChannelCue subscription, then create your own Google OAuth web client and save its client ID and secret here. You can return to Configuration any time to replace or update these values.';
+  els.trialHeading.textContent = comped ? 'Complimentary access' : 'Start your 7-day trial';
+  els.pricingNote.classList.toggle('hidden', comped);
+  renderHeroState(config);
   els.trialPanel.classList.toggle('hidden', !trial?.available);
   if (!trial?.available) return;
 
