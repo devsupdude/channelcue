@@ -272,7 +272,7 @@ function renderHeroState(config = {}) {
   els.heroConfigButton.classList.toggle('hidden', !state.signedIn);
   renderAccountBanner(config);
   const trial = config.defaultGoogleTrial;
-  const expired = Boolean(trial?.expired && !config.personalConfigured);
+  const expired = Boolean(trial?.expired && !config.personalConfigured && config.access?.accessOverride !== 'comped');
   els.heroPayButton.classList.toggle('hidden', !expired);
   els.heroStartButton.classList.toggle('hidden', expired);
   els.postTrialThanks.classList.toggle('hidden', !expired);
@@ -294,7 +294,7 @@ function renderHeroState(config = {}) {
 
 function renderAccountBanner(config = {}) {
   const trial = config.defaultGoogleTrial;
-  const expired = Boolean(trial?.expired && !config.personalConfigured);
+  const expired = Boolean(trial?.expired && !config.personalConfigured && config.access?.accessOverride !== 'comped');
   const needsIndex = Boolean(config.needsIndex);
   const showBanner = state.signedIn && (!state.connected || expired || needsIndex);
   els.accountBanner.classList.toggle('hidden', !showBanner);
