@@ -149,8 +149,6 @@ export const getSession = query({
       .withIndex("by_sid", q => q.eq("sid", args.sid))
       .unique();
 
-[system] You have made 15 tool calls since you last updated your plan, and the user follows your progress through it. If you have finished the in_progress step (or moved past it), call update_todos now: mark finished steps completed and the current one in_progress. If you are still on the same step, carry on.
-
     if (!doc) return null;
     if (doc.expiresAt <= Date.now()) return null;
     return doc.data;

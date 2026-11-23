@@ -98,8 +98,6 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-
-[system] You have made 15 tool calls since you last updated your plan, and the user follows your progress through it. If you have finished the in_progress step (or moved past it), call update_todos now: mark finished steps completed and the current one in_progress. If you are still on the same step, carry on.
   if (req.path.startsWith('/api/') || req.path === REDIRECT_PATH) {
     res.setHeader('Cache-Control', 'no-store');
   }
@@ -850,8 +848,6 @@ async function getChannelIndexDetails(youtube, channels) {
                 title: channel.title,
                 description: channel.description,
                 thumbnails: { medium: { url: channel.thumbnail }, default: { url: channel.thumbnail } }
-
-[system] You have made 15 tool calls since you last updated your plan, and the user follows your progress through it. If you have finished the in_progress step (or moved past it), call update_todos now: mark finished steps completed and the current one in_progress. If you are still on the same step, carry on.
               },
               statistics: {}
             });

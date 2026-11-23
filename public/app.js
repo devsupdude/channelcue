@@ -449,8 +449,6 @@ function renderVideos(target, videos) {
     return;
   }
 
-[system] You have made 15 tool calls since you last updated your plan, and the user follows your progress through it. If you have finished the in_progress step (or moved past it), call update_todos now: mark finished steps completed and the current one in_progress. If you are still on the same step, carry on.
-
   target.innerHTML = videos
     .map(video => {
       return `
