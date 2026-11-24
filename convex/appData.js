@@ -410,12 +410,12 @@ export const setIndex = mutation({
 // Each step is leased and checkpointed together with its staged chunks. The
 // published metadata is changed only in the transaction that finishes a job.
 export const acquireIndexJob = mutation({
-  args: { userId: v.string(), leaseId: v.string(), now: v.number(), batchId: v.string(), maxResults: v.number() },
+  args: { userId: v.string(), leaseId: v.string(), now: v.number(), batchId: v.string(), maxResults: v.number(), selectionKey: v.string(), channelIds: v.array(v.string()) },
   handler: async (ctx, a) => {
     let doc = await ctx.db.query("indexJobs").withIndex("by_user", q => q.eq("userId", a.userId)).unique();
     if (doc && doc.leaseUntil > a.now) return { busy: true };
-    const job = doc?.job ?? { batchId: a.batchId, phase: "subscriptions", pageToken: null, page: [], offset: 0, channelCount: 0, videoCount: 0, errorCount: 0, chunkIndex: 0, maxResults: a.maxResults };
-    if (doc) await ctx.db.patch(doc._id, { leaseId: a.leaseId, leaseUntil: a.now + 60000 });
+    const job = doc?.job?.selectionKey === a.selectionKey ? doc.job : { batchId: a.batchId, phase: "subscriptions", pageToken: null, page: [], offset: 0, channelCount: 0, videoCount: 0, errorCount: 0, chunkIndex: 0, maxResults: a.maxResults, selectionKey: a.selectionKey, channelIds: a.channelIds };
+    if (doc) await ctx.db.patch(doc._id, { job, leaseId: a.leaseId, leaseUntil: a.now + 60000 });
     else await ctx.db.insert("indexJobs", { userId: a.userId, job, leaseId: a.leaseId, leaseUntil: a.now + 60000 });
     return { job };
   }

@@ -1,6 +1,8 @@
 const state = {
   connected: false,
   subscriptions: [],
+  availableSubscriptions: [],
+  selectedChannelIds: new Set(),
   cachedVideos: [],
   cachedIndexLoaded: false,
   clerkConfigured: false,
@@ -52,6 +54,13 @@ const els = {
   trialStatus: document.querySelector('#trialStatus'),
   useDefaultKeyButton: document.querySelector('#useDefaultKeyButton'),
   channelSelect: document.querySelector('#channelSelect'),
+  channelChoices: document.querySelector('#channelChoices'),
+  channelFilter: document.querySelector('#channelFilter'),
+  selectionCount: document.querySelector('#selectionCount'),
+  videoLimit: document.querySelector('#videoLimit'),
+  loadChannelsButton: document.querySelector('#loadChannelsButton'),
+  selectAllChannels: document.querySelector('#selectAllChannels'),
+  clearChannels: document.querySelector('#clearChannels'),
   channelEmpty: document.querySelector('#channelEmpty'),
   channelDetails: document.querySelector('#channelDetails'),
   videoList: document.querySelector('#videoList'),
@@ -336,7 +345,7 @@ function renderAccountBanner(config = {}) {
   els.accountConnectButton.classList.add('hidden');
   els.accountBannerTitle.textContent = 'Channels loaded';
   els.accountBannerMessage.textContent =
-    'Go ahead and click Refresh index once. We will show progress while ChannelCue gathers recent uploads.';
+    'Choose the channels you want below, then click Refresh index.';
 }
 
 function renderTrial(config) {
@@ -495,6 +504,28 @@ async function loadGoogleConfig() {
   }
 }
 
+function renderChannelChoices() {
+  const filter = els.channelFilter.value.trim().toLowerCase();
+  const channels = state.availableSubscriptions.filter(channel => (channel.title || '').toLowerCase().includes(filter));
+  els.channelChoices.replaceChildren();
+  if (!channels.length) {
+    const message = document.createElement('p');
+    message.textContent = state.availableSubscriptions.length ? 'No channels match your search.' : 'No subscriptions found. Connect YouTube and load your channels.';
+    els.channelChoices.append(message);
+  }
+  for (const channel of channels) {
+    const label = document.createElement('label'); label.className = 'channel-choice';
+    const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = state.selectedChannelIds.has(channel.id);
+    checkbox.addEventListener('change', () => { if (checkbox.checked) state.selectedChannelIds.add(channel.id); else state.selectedChannelIds.delete(channel.id); updateSelectionCount(); });
+    label.append(checkbox);
+    if (channel.thumbnail) { const img = document.createElement('img'); img.src = channel.thumbnail; img.alt = ''; label.append(img); }
+    const title = document.createElement('span'); title.textContent = channel.title || 'Untitled channel'; label.append(title);
+    els.channelChoices.append(label);
+  }
+  updateSelectionCount();
+}
+function updateSelectionCount() { els.selectionCount.textContent = `${state.selectedChannelIds.size} of ${state.availableSubscriptions.length} channels selected`; }
+
 async function loadSubscriptions() {
   showNotice('');
   showNotice('Loading your YouTube subscriptions. This can take a moment if you follow a lot of channels.');
@@ -502,17 +533,18 @@ async function loadSubscriptions() {
   els.indexStatus.textContent = 'Loading channels from YouTube...';
   try {
     const data = await api('/api/subscriptions');
+    state.availableSubscriptions = data.subscriptions;
+    state.selectedChannelIds = new Set(state.cachedIndexLoaded ? state.subscriptions.map(channel => channel.id) : []);
+    renderChannelChoices();
     state.subscriptions = data.subscriptions;
-    state.cachedVideos = [];
-    state.cachedIndexLoaded = false;
     renderSubscriptions();
     await loadIndexStatus();
-    if (state.subscriptions[0]) {
+    if (!state.cachedIndexLoaded && state.subscriptions[0]) {
       els.channelSelect.value = state.subscriptions[0].id;
       await loadChannel(state.subscriptions[0].id);
     }
-    showNotice(`Loaded ${state.subscriptions.length} subscribed channels. Click Refresh index once to make search useful.`);
-    renderAccountBanner({ configured: state.googleConfigured, needsIndex: true });
+    showNotice(`Loaded ${state.subscriptions.length} subscribed channels. Select the channels you want, then click Refresh index.`);
+    renderAccountBanner({ configured: state.googleConfigured, needsIndex: !state.cachedIndexLoaded });
   } catch (error) {
     setLoading(els.videoList, 'Could not load YouTube subscriptions.');
     handleAppError(error);
@@ -556,6 +588,10 @@ async function loadIndexStatus() {
 }
 
 async function refreshIndex() {
+  if (!state.availableSubscriptions.length) { await loadSubscriptions(); if (!state.availableSubscriptions.length) return; }
+  if (!state.selectedChannelIds.size) { showNotice('Select at least one channel to index.'); document.querySelector('#channelPicker').scrollIntoView({ behavior: 'smooth' }); return; }
+  const channelIds = [...state.selectedChannelIds].sort();
+  const maxResults = Number(els.videoLimit.value);
   els.refreshIndexButton.disabled = true;
   els.accountIndexButton.disabled = true;
   els.refreshIndexButton.textContent = 'Refreshing...';
@@ -567,7 +603,7 @@ async function refreshIndex() {
       status = await api('/api/index/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
+        body: JSON.stringify({ channelIds, maxResults })
       });
       if (status.busy) {
         throw new Error('An index request is already running. Wait for it to finish, then click Refresh index to resume if needed.');
@@ -716,7 +752,7 @@ async function init() {
     updateAuthUi(status.configured);
     await loadGoogleConfig();
     const hasCachedIndex = await loadCachedIndex();
-    if (!hasCachedIndex && state.connected) showNotice('Click Refresh index to build your searchable video index.');
+    if (state.connected) await loadSubscriptions();
     if (!hasCachedIndex) await loadIndexStatus();
   } catch (error) {
     handleAppError(error);
@@ -776,9 +812,11 @@ els.accountConnectButton.addEventListener('click', () => {
   els.connectButton.click();
 });
 
-els.accountIndexButton.addEventListener('click', () => {
-  refreshIndex();
-});
+els.accountIndexButton.addEventListener('click', () => { document.querySelector('#channelPicker').scrollIntoView({ behavior: 'smooth' }); });
+els.loadChannelsButton.addEventListener('click', loadSubscriptions);
+els.channelFilter.addEventListener('input', renderChannelChoices);
+els.selectAllChannels.addEventListener('click', () => { state.selectedChannelIds = new Set(state.availableSubscriptions.map(channel => channel.id)); renderChannelChoices(); });
+els.clearChannels.addEventListener('click', () => { state.selectedChannelIds.clear(); renderChannelChoices(); });
 
 els.billingTab.addEventListener('click', () => activateConfigTab('billing'));
 els.googleTab.addEventListener('click', () => activateConfigTab('google'));
@@ -837,6 +875,9 @@ els.logoutButton.addEventListener('click', async () => {
   await fetch('/auth/logout', { method: 'POST' });
   state.connected = false;
   state.subscriptions = [];
+  state.availableSubscriptions = [];
+  state.selectedChannelIds.clear();
+  renderChannelChoices();
   state.cachedVideos = [];
   state.cachedIndexLoaded = false;
   renderSubscriptions();
@@ -853,6 +894,9 @@ els.subBriefLogoutButton.addEventListener('click', async () => {
   state.connected = false;
   state.signedIn = false;
   state.subscriptions = [];
+  state.availableSubscriptions = [];
+  state.selectedChannelIds.clear();
+  renderChannelChoices();
   state.cachedVideos = [];
   state.cachedIndexLoaded = false;
   renderSubscriptions();

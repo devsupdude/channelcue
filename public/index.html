@@ -199,6 +199,13 @@
           </form>
         </section>
 
+        <section class="picker panel" id="channelPicker">
+          <div class="picker-heading"><div><h2>Choose channels to index</h2><p>Select the subscriptions you want to search. Only checked channels will be indexed.</p></div><button id="loadChannelsButton" class="secondary" type="button">Load my channels</button></div>
+          <div class="picker-tools"><label for="channelFilter">Find a channel <input id="channelFilter" type="search" placeholder="Search your subscriptions" /></label><label for="videoLimit">Recent videos per channel <select id="videoLimit"><option value="100">100 videos</option><option value="300">300 videos</option><option value="50">50 videos</option></select></label></div>
+          <div class="picker-actions"><button id="selectAllChannels" class="secondary" type="button">Select all</button><button id="clearChannels" class="secondary" type="button">Clear selection</button><span id="selectionCount" aria-live="polite">No channels selected</span></div>
+          <div id="channelChoices" class="channel-choices"><p>Connect YouTube, then load your subscribed channels.</p></div>
+        </section>
+
         <section class="index-bar">
           <div>
             <strong>Search index</strong>

@@ -1240,19 +1240,26 @@ app.post('/api/index/refresh', async (req, res, next) => {
     if (!convex && IS_VERCEL) throw new Error('Persistent index storage is not configured.');
     leaseId = randomBytes(16).toString('hex');
     const batchId = randomBytes(16).toString('hex');
-    const requested = Number(req.body?.maxResults || INDEX_UPLOADS_PER_CHANNEL);
-    const maxResults = Number.isFinite(requested) ? Math.max(1, Math.min(Math.floor(requested), 50)) : 25;
+    const requested = Number(req.body?.maxResults);
+    if (![50, 100, 300].includes(requested)) return res.status(400).json({ error: 'Choose a limit of 50, 100, or 300 videos per channel.' });
+    const channelIds = [...new Set(Array.isArray(req.body?.channelIds) ? req.body.channelIds : [])].sort();
+    if (!channelIds.length || channelIds.some(id => typeof id !== 'string' || !isValidYouTubeId(id))) return res.status(400).json({ error: 'Select at least one valid subscribed channel.' });
+    const subscribed = new Set((req.session.subscriptions || await listAllSubscriptions(youtube)).map(channel => channel.id));
+    if (channelIds.some(id => !subscribed.has(id))) return res.status(400).json({ error: 'One or more channels are not in your YouTube subscriptions. Reload your channels.' });
+    const maxResults = requested;
+    const selectionKey = JSON.stringify([maxResults, channelIds]);
     const localPath = getIndexPath(userId) + '.job';
     let job;
     if (convex) {
-      const result = await convex.mutation(convexFns.acquireIndexJob, { userId, leaseId, now: Date.now(), batchId, maxResults });
+      const result = await convex.mutation(convexFns.acquireIndexJob, { userId, leaseId, now: Date.now(), batchId, maxResults, selectionKey, channelIds });
       if (result.busy) return res.json({ busy: true });
       job = result.job;
     } else {
       if (activeRefreshes.has(userId)) return res.json({ busy: true });
       activeRefreshes.set(userId, true);
       localLease = true;
-      job = existsSync(localPath) ? JSON.parse(readFileSync(localPath, 'utf8')) : { batchId, phase: 'subscriptions', pageToken: null, page: [], offset: 0, channelCount: 0, videoCount: 0, errorCount: 0, chunkIndex: 0, maxResults, localChannels: [], localVideos: [] };
+      const saved = existsSync(localPath) ? JSON.parse(readFileSync(localPath, 'utf8')) : null;
+      job = saved?.selectionKey === selectionKey ? saved : { batchId, phase: 'subscriptions', pageToken: null, page: [], offset: 0, channelCount: 0, videoCount: 0, errorCount: 0, chunkIndex: 0, maxResults, selectionKey, channelIds, localChannels: [], localVideos: [] };
     }
     let channels = [], videos = [];
     if (job.phase === 'subscriptions') {
@@ -1260,24 +1267,31 @@ app.post('/api/index/refresh', async (req, res, next) => {
       job.page = (response.data.items || []).map(item => {
         const snippet = item.snippet || {};
         return { id: snippet.resourceId?.channelId, title: snippet.title, description: limitText(snippet.description, INDEX_CHANNEL_DESCRIPTION_LIMIT), thumbnail: snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url };
-      }).filter(channel => channel.id);
+      }).filter(channel => channel.id && job.channelIds.includes(channel.id));
       job.nextPageToken = response.data.nextPageToken || null;
       job.offset = 0;
       job.phase = 'channels';
     } else {
       const selected = job.page.slice(job.offset, job.offset + 1);
-      const details = await getChannelIndexDetails(youtube, selected);
-      channels = selected.map(channel => compactChannelForIndex(channel, details.get(channel.id)));
-      for (const channel of selected) {
+      let finishedChannel = true;
+      if (selected.length) {
+        const details = await getChannelIndexDetails(youtube, selected);
+        const channel = selected[0];
+        if (!job.channelPageToken) channels = selected.map(item => compactChannelForIndex(item, details.get(item.id)));
         const playlistId = details.get(channel.id)?.uploadsPlaylistId;
-        if (!isValidYouTubeId(playlistId)) continue;
-        // A failed request aborts this checkpoint; it never publishes partial data.
-        const response = await youtube.playlistItems.list({ part: ['snippet', 'contentDetails'], playlistId, maxResults: job.maxResults }, { timeout: 4000 });
-        videos.push(...(response.data.items || []).map(mapVideo).filter(video => isValidYouTubeId(video.id)).map(compactVideoForIndex));
+        if (isValidYouTubeId(playlistId)) {
+          const remaining = job.maxResults - (job.channelVideoCount || 0);
+          const response = await youtube.playlistItems.list({ part: ['snippet', 'contentDetails'], playlistId, maxResults: Math.min(50, remaining), pageToken: job.channelPageToken || undefined }, { timeout: 5000 });
+          const items = (response.data.items || []).map(mapVideo).filter(video => isValidYouTubeId(video.id)).map(compactVideoForIndex);
+          videos.push(...items);
+          job.channelVideoCount = (job.channelVideoCount || 0) + items.length;
+          job.channelPageToken = response.data.nextPageToken || null;
+          finishedChannel = !job.channelPageToken || job.channelVideoCount >= job.maxResults;
+        }
+        job.channelCount += channels.length;
+        job.videoCount += videos.length;
+        if (finishedChannel) { job.offset++; job.channelPageToken = null; job.channelVideoCount = 0; }
       }
-      job.offset += selected.length;
-      job.channelCount += channels.length;
-      job.videoCount += videos.length;
       if (job.offset >= job.page.length) {
         job.page = [];
         job.pageToken = job.nextPageToken;

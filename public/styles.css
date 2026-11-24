@@ -751,3 +751,17 @@ input:focus {
     justify-content: stretch;
   }
 }
+
+.picker { margin: 20px 0; padding: 24px; }
+.picker-heading, .picker-tools, .picker-actions { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.picker-heading h2 { margin: 0 0 6px; }
+.picker-heading p { margin: 0; opacity: .75; }
+.picker-tools { margin: 20px 0 12px; justify-content: flex-start; }
+.picker-tools label { display: grid; gap: 6px; flex: 1 1 220px; }
+.picker-actions { justify-content: flex-start; margin-bottom: 12px; }
+.channel-choices { max-height: 320px; overflow-y: auto; border: 1px solid #d8deea; border-radius: 12px; }
+.channel-choice { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid #e6eaf1; cursor: pointer; }
+.channel-choice:last-child { border-bottom: 0; }
+.channel-choice input { width: auto; flex: none; }
+.channel-choice img { width: 38px; height: 38px; object-fit: cover; border-radius: 50%; }
+.channel-choices > p { padding: 8px 14px; }
